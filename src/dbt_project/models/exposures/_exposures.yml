@@ -1,0 +1,36 @@
+version: 2
+
+exposures:
+  - name: defi_market_slack_bot
+    label: DeFi Market Slack Bot
+    type: application
+    maturity: high
+    url: https://slack.com/app/defi-market-bot
+    description: >
+      Real consumer. Queries fct_daily_token_metrics and fct_protocol_health to
+      post periodic market summaries to Slack. Changes upstream of these marts
+      directly affect what the bot reports.
+    depends_on:
+      - ref('fct_daily_token_metrics')
+      - ref('fct_protocol_health')
+    owner:
+      name: Impact Analyst
+      email: kartikeya.mandhar511@gmail.com
+    meta:
+      priority: high
+
+  - name: whale_alert_pipeline
+    label: Whale Alert Pipeline
+    type: ml
+    maturity: medium
+    description: >
+      Declared downstream ML pipeline that scores large wallet movements using
+      fct_whale_movements enriched with dim_tokens metadata.
+    depends_on:
+      - ref('fct_whale_movements')
+      - ref('dim_tokens')
+    owner:
+      name: Impact Analyst
+      email: kartikeya.mandhar511@gmail.com
+    meta:
+      priority: medium

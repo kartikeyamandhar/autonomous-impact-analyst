@@ -1,0 +1,74 @@
+version: 2
+
+models:
+  - name: stg_coingecko__coins_markets
+    description: Cleaned, typed CoinGecko market data. One row per coin.
+    columns:
+      - name: coin_id
+        description: CoinGecko coin identifier.
+        data_tests: [unique, not_null]
+      - name: symbol
+        description: Ticker symbol.
+        data_tests: [not_null]
+      - name: current_price_usd
+        description: Current price in USD.
+
+  - name: stg_coingecko__coins_detail
+    description: Cleaned per-coin metadata for the top 20 coins.
+    columns:
+      - name: coin_id
+        description: CoinGecko coin identifier.
+        data_tests: [unique, not_null]
+      - name: symbol
+        description: Ticker symbol.
+        data_tests: [not_null]
+
+  - name: stg_coingecko__exchanges
+    description: Cleaned exchange attributes. One row per exchange.
+    columns:
+      - name: exchange_id
+        description: CoinGecko exchange identifier.
+        data_tests: [unique, not_null]
+      - name: exchange_name
+        description: Display name.
+        data_tests: [not_null]
+
+  - name: stg_defi_llama__protocols
+    description: Cleaned protocol attributes. One row per protocol.
+    columns:
+      - name: protocol_id
+        description: DeFi Llama protocol identifier.
+        data_tests: [unique, not_null]
+      - name: protocol_name
+        description: Display name.
+        data_tests: [not_null]
+
+  - name: stg_defi_llama__yields_pools
+    description: Cleaned yield pool data. One row per pool.
+    columns:
+      - name: pool_id
+        description: Pool UUID.
+        data_tests: [unique, not_null]
+      - name: project_name
+        description: Project slug; joins to protocols.slug.
+        data_tests: [not_null]
+
+  - name: stg_etherscan__transactions
+    description: Cleaned ETH transactions, deduped on tx hash.
+    columns:
+      - name: tx_hash
+        description: Transaction hash.
+        data_tests: [unique, not_null]
+      - name: from_address
+        description: Lowercased sender address.
+        data_tests: [not_null]
+
+  - name: stg_etherscan__token_transfers
+    description: Cleaned ERC-20 transfers, deduped on a surrogate key.
+    columns:
+      - name: transfer_id
+        description: Surrogate key over (hash, from, to, contract, value).
+        data_tests: [unique, not_null]
+      - name: tx_hash
+        description: Transaction hash.
+        data_tests: [not_null]

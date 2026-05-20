@@ -1,0 +1,175 @@
+version: 2
+
+models:
+  - name: fct_daily_token_metrics
+    description: Daily per-token fact combining CoinGecko market data, matched protocol TVL, and whale activity. Widest model — touches all three API sources.
+    columns:
+      - name: coin_id
+        description: CoinGecko coin identifier (primary key).
+        data_tests: [unique, not_null]
+      - name: symbol
+        description: Ticker symbol.
+      - name: coin_name
+        description: Display name.
+      - name: current_price_usd
+        description: Current price in USD.
+      - name: market_cap_usd
+        description: Market capitalization in USD.
+      - name: total_volume_usd
+        description: 24h trading volume in USD.
+      - name: market_cap_rank
+        description: CoinGecko market cap rank.
+      - name: price_change_pct_24h
+        description: 24h percentage price change.
+      - name: all_time_high_usd
+        description: All-time-high price in USD.
+      - name: protocol_id
+        description: Matched DeFi Llama protocol identifier (nullable).
+      - name: protocol_name
+        description: Matched protocol name (nullable).
+      - name: protocol_tvl_usd
+        description: Matched protocol TVL in USD (nullable).
+      - name: whale_tx_count
+        description: Count of tracked whale transfers attributed to this token's contract.
+      - name: whale_total_value
+        description: Sum of tracked transfer values attributed to this token's contract.
+      - name: whale_unique_counterparties
+        description: Distinct counterparties in tracked transfers for this token's contract.
+
+  - name: fct_protocol_health
+    description: Per-protocol health fact joining aggregated yield metrics with governance-token market performance. One row per protocol with a governance token.
+    columns:
+      - name: protocol_id
+        description: DeFi Llama protocol identifier (primary key).
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_protocols')
+              field: protocol_id
+      - name: protocol_name
+        description: Protocol display name.
+      - name: symbol
+        description: Governance token symbol.
+      - name: category
+        description: Protocol category.
+      - name: tvl_usd
+        description: Protocol total value locked in USD.
+      - name: change_1d_pct
+        description: 1-day TVL percentage change.
+      - name: change_7d_pct
+        description: 7-day TVL percentage change.
+      - name: avg_apy
+        description: Average APY across the protocol's yield pools.
+      - name: total_pool_tvl
+        description: Summed TVL across the protocol's yield pools.
+      - name: pool_count
+        description: Number of yield pools for the protocol.
+      - name: governance_token_price_usd
+        description: Current USD price of the governance token (nullable).
+      - name: governance_token_change_24h
+        description: 24h price change of the governance token (nullable).
+      - name: governance_token_market_cap_usd
+        description: Market cap of the governance token (nullable).
+
+  - name: fct_whale_movements
+    description: Per-address whale movement fact enriched with token metadata where the address maps to a tracked token contract.
+    columns:
+      - name: address
+        description: Wallet address (primary key, lowercased).
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_whale_activity')
+              field: address
+      - name: tx_count
+        description: Number of transfers involving the address.
+      - name: total_value
+        description: Summed transfer value involving the address.
+      - name: unique_counterparties
+        description: Distinct counterparties involving the address.
+      - name: token_coin_id
+        description: Matched token coin_id (nullable).
+      - name: token_symbol
+        description: Matched token symbol (nullable).
+      - name: token_name
+        description: Matched token display name (nullable).
+
+  - name: dim_tokens
+    description: Static token attributes sourced from CoinGecko coin detail.
+    columns:
+      - name: coin_id
+        description: CoinGecko coin identifier (primary key).
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('fct_daily_token_metrics')
+              field: coin_id
+      - name: symbol
+        description: Ticker symbol.
+      - name: coin_name
+        description: Display name.
+      - name: description
+        description: English description text.
+      - name: categories
+        description: JSON array of category labels.
+      - name: homepage_url
+        description: Project homepage URL.
+      - name: github_url
+        description: Primary GitHub repository URL.
+      - name: genesis_date
+        description: Genesis date.
+      - name: developer_forks
+        description: GitHub fork count.
+      - name: developer_stars
+        description: GitHub star count.
+
+  - name: dim_protocols
+    description: Static protocol attributes sourced from DeFi Llama protocols.
+    columns:
+      - name: protocol_id
+        description: DeFi Llama protocol identifier (primary key).
+        data_tests: [unique, not_null]
+      - name: protocol_name
+        description: Display name.
+      - name: symbol
+        description: Governance token symbol.
+      - name: category
+        description: Protocol category.
+      - name: chains
+        description: JSON array of chains the protocol operates on.
+      - name: tvl_usd
+        description: Total value locked in USD.
+      - name: change_1d_pct
+        description: 1-day TVL percentage change.
+      - name: change_7d_pct
+        description: 7-day TVL percentage change.
+      - name: audit_count
+        description: Number of audits.
+      - name: url
+        description: Protocol URL.
+      - name: slug
+        description: URL slug.
+
+  - name: dim_exchanges
+    description: Static exchange attributes sourced from CoinGecko exchanges.
+    columns:
+      - name: exchange_id
+        description: CoinGecko exchange identifier (primary key).
+        data_tests: [unique, not_null]
+      - name: exchange_name
+        description: Display name.
+      - name: year_established
+        description: Year the exchange was established.
+      - name: country
+        description: Country of incorporation.
+      - name: trust_score
+        description: CoinGecko trust score 0-10.
+      - name: trust_score_rank
+        description: Trust score rank.
+      - name: trade_volume_24h_btc
+        description: 24h trade volume denominated in BTC.
+      - name: url
+        description: Exchange URL.

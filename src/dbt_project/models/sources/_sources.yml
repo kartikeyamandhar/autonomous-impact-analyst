@@ -1,0 +1,104 @@
+version: 2
+
+sources:
+  - name: coingecko
+    description: Raw CoinGecko API responses loaded by scripts/seed_databricks.py.
+    schema: raw
+    loaded_at_field: _extracted_at
+    freshness:
+      warn_after: {count: 6, period: hour}
+      error_after: {count: 12, period: hour}
+    tables:
+      - name: coingecko_coins_markets
+        description: One row per top-100 coin from /coins/markets. All columns STRING.
+        columns:
+          - name: id
+            description: CoinGecko coin identifier (primary key).
+          - name: symbol
+            description: Ticker symbol.
+          - name: current_price
+            description: Current price in USD (string).
+          - name: market_cap
+            description: Market capitalization in USD (string).
+          - name: total_volume
+            description: 24h trading volume in USD (string).
+      - name: coingecko_coins_detail
+        description: Deep per-coin metadata from /coins/{id} for the top 20 coins.
+        columns:
+          - name: id
+            description: CoinGecko coin identifier (primary key).
+          - name: developer_data
+            description: JSON blob of GitHub activity (forks, stars, ...).
+          - name: links
+            description: JSON blob of homepage / repo / social links.
+      - name: coingecko_exchanges
+        description: One row per exchange from /exchanges.
+        columns:
+          - name: id
+            description: CoinGecko exchange identifier (primary key).
+          - name: trust_score
+            description: CoinGecko trust score 0-10 (string).
+          - name: trade_volume_24h_btc
+            description: 24h trade volume denominated in BTC (string).
+
+  - name: defi_llama
+    description: Raw DeFi Llama API responses.
+    schema: raw
+    loaded_at_field: _extracted_at
+    freshness:
+      warn_after: {count: 6, period: hour}
+      error_after: {count: 12, period: hour}
+    tables:
+      - name: defi_llama_protocols
+        description: One row per protocol from /protocols (first 200).
+        columns:
+          - name: id
+            description: DeFi Llama protocol identifier (primary key).
+          - name: slug
+            description: URL slug; joins to yields_pools.project.
+          - name: tvl
+            description: Total value locked in USD (string).
+          - name: category
+            description: Protocol category (e.g., Dexes, Lending, CEX).
+      - name: defi_llama_yields_pools
+        description: One row per yield pool from /yields/pools (first 500).
+        columns:
+          - name: pool
+            description: Pool UUID (primary key).
+          - name: project
+            description: Project slug; joins to protocols.slug.
+          - name: apy
+            description: Annual percentage yield (string).
+          - name: tvlUsd
+            description: Pool TVL in USD (string).
+
+  - name: etherscan
+    description: Raw Etherscan V2 API responses for tracked whale/exchange wallets.
+    schema: raw
+    loaded_at_field: _extracted_at
+    freshness:
+      warn_after: {count: 6, period: hour}
+      error_after: {count: 12, period: hour}
+    tables:
+      - name: etherscan_eth_transactions
+        description: Recent ETH transactions (txlist) for 3 tracked addresses.
+        columns:
+          - name: hash
+            description: Transaction hash.
+          - name: value
+            description: Transferred value in wei (string).
+          - name: from
+            description: Sender address.
+          - name: to
+            description: Recipient address.
+      - name: etherscan_token_transfers
+        description: Recent ERC-20 transfers (tokentx) for 2 tracked contracts.
+        columns:
+          - name: hash
+            description: Transaction hash.
+          - name: contractAddress
+            description: ERC-20 token contract address.
+          - name: value
+            description: Raw token amount before decimal adjustment (string).
+          - name: tokenDecimal
+            description: Token decimal places (string).
