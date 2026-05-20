@@ -8,9 +8,10 @@ Usage:
     export ETHERSCAN_API_KEY=your_key
     python scripts/fetch_fixtures.py
 """
-import os
 import json
+import os
 import time
+
 import requests
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "specs", "fixtures")
