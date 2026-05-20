@@ -1,0 +1,40 @@
+# Documentation (local only)
+*.md
+specs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# dbt
+src/dbt_project/target/
+src/dbt_project/dbt_packages/
+src/dbt_project/logs/
+
+# Snapshots and locks
+data/
+*.lock
+
+# OS
+.DS_Store
+Thumbs.db
