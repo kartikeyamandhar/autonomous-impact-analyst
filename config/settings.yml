@@ -1,0 +1,79 @@
+# Runtime configuration for the Autonomous Impact Analyst.
+# Tunables only. Secrets and connection strings live in .env.
+
+# ---------------------------------------------------------------------------
+# Risk scoring
+#
+# Per-node risk in [0, 1] is computed as a weighted sum of these factors.
+# Weights MUST sum to exactly 1.0.
+# ---------------------------------------------------------------------------
+risk_scoring:
+  weights:
+    distance_to_exposure: 0.30   # closer to an exposure -> higher risk
+    fan_out: 0.20                # more downstream dependents -> higher risk
+    test_coverage_gap: 0.25      # uncovered nodes -> higher risk
+    severity: 0.15               # anomaly severity -> higher risk
+    column_lineage_match: 0.10   # column actually flows through -> higher risk
+
+  # Thresholds bucket an overall risk score into a discrete level.
+  # MUST be strictly ascending: low < medium < high.
+  thresholds:
+    low: 0.30
+    medium: 0.60
+    high: 0.85
+
+# ---------------------------------------------------------------------------
+# Monitoring scope and cadence
+# ---------------------------------------------------------------------------
+monitoring:
+  schedule_minutes: 15
+  raw_schema: raw
+  watch_sources:
+    - coingecko_coins_markets
+    - coingecko_coins_detail
+    - coingecko_exchanges
+    - defi_llama_protocols
+    - defi_llama_yields_pools
+    - etherscan_eth_transactions
+    - etherscan_token_transfers
+  max_traversal_depth: 10
+  prune_unused_columns: true
+
+# ---------------------------------------------------------------------------
+# Data quality thresholds
+# ---------------------------------------------------------------------------
+data_quality:
+  row_count_drop_ratio: 0.20      # >20% drop vs. baseline triggers an event
+  null_ratio_spike_delta: 0.10    # >10pp increase in null ratio triggers an event
+  value_range_breach_stddev: 3.0  # >3 sigma outside baseline range
+  min_baseline_samples: 5
+
+# ---------------------------------------------------------------------------
+# Freshness defaults (per source). Override via dbt source freshness configs.
+# ---------------------------------------------------------------------------
+freshness:
+  default_warn_after_hours: 6
+  default_error_after_hours: 24
+  loaded_at_field: ingested_at
+
+# ---------------------------------------------------------------------------
+# Action toggles. Disable to dry-run an action type.
+# ---------------------------------------------------------------------------
+actions:
+  enable_log: true
+  enable_slack_alert: true
+  enable_github_pr: true
+  enable_pause_dbt_run: false
+  github_pr_branch_prefix: impact-analyst/fix
+  slack_alert_min_severity: warning
+
+# ---------------------------------------------------------------------------
+# External API rate limits (sleep seconds between calls).
+# CoinGecko demo: 30/min -> 2.5s. Etherscan free: 5/sec -> 0.25s.
+# ---------------------------------------------------------------------------
+rate_limits:
+  coingecko_sleep_seconds: 2.5
+  etherscan_sleep_seconds: 0.25
+  defi_llama_sleep_seconds: 1.0
+  max_retries: 3
+  retry_backoff_seconds: 5
