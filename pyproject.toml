@@ -17,6 +17,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the repo root on sys.path so `import src...` works whether tests are run
+# via the `pytest` console script (CI) or `python -m pytest` (local).
+pythonpath = ["."]
 markers = [
     "phase_0: Phase 0 scaffolding tests",
     "phase_1: Phase 1 tests",
