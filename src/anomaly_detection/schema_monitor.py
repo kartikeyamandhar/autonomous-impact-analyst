@@ -16,22 +16,13 @@ from typing import Any
 
 from src.anomaly_detection.anomaly_events import AnomalyEvent, AnomalyType, Severity
 from src.anomaly_detection.snapshot_store import ColumnSnapshot, SchemaSnapshot
+from src.common.identifiers import PROJECT, source_node_id  # re-exported
 
 logger = logging.getLogger(__name__)
 
-PROJECT = "autonomous_impact_analyst"
 DEFAULT_CATALOG_PATH = "src/dbt_project/target/catalog.json"
 
-
-def _source_name(table: str) -> str:
-    for prefix in ("coingecko", "defi_llama", "etherscan"):
-        if table.startswith(prefix + "_"):
-            return prefix
-    return table.split("_")[0]
-
-
-def source_node_id(table: str) -> str:
-    return f"source.{PROJECT}.{_source_name(table)}.{table}"
+__all__ = ["SchemaMonitor", "source_node_id", "PROJECT"]
 
 
 class SchemaMonitor:

@@ -35,6 +35,21 @@ class GraphQueries:
             rec = session.run(cypher, id=node_id).single()
             return dict(rec) if rec else None
 
+    def tested_model(self, test_id: str) -> str | None:
+        """The model unique_id a test guards (via its column or directly)."""
+        cypher = (
+            "MATCH (t {unique_id: $id})-[:TESTS]->(x) "
+            "RETURN x.unique_id AS uid, x.model_unique_id AS model, "
+            "labels(x)[0] AS label LIMIT 1"
+        )
+        with self.driver.session() as session:
+            rec = session.run(cypher, id=test_id).single()
+        if not rec:
+            return None
+        if rec["label"] == "Column" and rec["model"]:
+            return str(rec["model"])
+        return str(rec["uid"])
+
     # -- model-level traversal ------------------------------------------------
 
     def downstream_models(self, model_id: str) -> list[dict]:

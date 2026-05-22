@@ -44,3 +44,5 @@ class AgentState:
     prior_occurrences: int = 0       # times this incident was seen before this run (#13)
     requires_approval: bool = False  # high-impact actions held for human approval (#10)
     correlated_events: list = field(default_factory=list)  # other events in the incident (#11)
+    errors: list = field(default_factory=list)  # loud failures (e.g. node not found)
+    run_id: str = ""                 # correlation id for this agent run

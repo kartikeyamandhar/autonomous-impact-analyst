@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,13 @@ from src.agent.risk_scorer import aggregate_risk, apply_modifiers, score_node
 from src.agent.types import AgentState
 from src.graph_engine.queries import GraphQueries
 
+structlog.configure(
+    processors=[
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.KeyValueRenderer(key_order=["run_id", "event"]),
+    ],
+)
 log = structlog.get_logger("impact_agent")
 
 _PROMPT_DIR = Path(__file__).parent / "prompts"
@@ -38,9 +47,13 @@ def _prompt(name: str) -> str:
 
 
 def _claude_text(
-    client: Any, system: str, user: str, max_tokens: int, agent_cfg: dict
-) -> str:
-    """Call Claude with retry/backoff, model fallback, and prompt caching."""
+    client: Any, system: str, user: str, max_tokens: int, agent_cfg: dict,
+    logger: Any = log, purpose: str = "llm",
+) -> tuple[str, str]:
+    """Call Claude with retry/backoff, model fallback, prompt caching.
+
+    Returns (text, model_used). Logs token usage for cost observability.
+    """
     models = [agent_cfg.get("model", DEFAULT_MODEL)]
     fallback = agent_cfg.get("fallback_model")
     if fallback and fallback not in models:
@@ -64,31 +77,28 @@ def _claude_text(
                 system=system_param,
                 messages=[{"role": "user", "content": user}],
             )
+            usage = getattr(resp, "usage", None)
+            logger.info(
+                "llm_call",
+                purpose=purpose,
+                model=model,
+                attempt=attempt,
+                input_tokens=getattr(usage, "input_tokens", None),
+                output_tokens=getattr(usage, "output_tokens", None),
+                cache_read_tokens=getattr(usage, "cache_read_input_tokens", None),
+            )
             parts = [
                 getattr(b, "text", "") for b in resp.content
                 if getattr(b, "type", "") == "text"
             ]
-            return ("".join(parts) or getattr(resp.content[0], "text", "")).strip()
+            return (("".join(parts) or getattr(resp.content[0], "text", "")).strip(), model)
         except Exception as e:  # noqa: BLE001 - retried below, surfaced if all fail
             last_err = e
-            log.warning("claude_call_failed", attempt=attempt, model=model, error=str(e))
+            logger.warning("llm_call_failed", purpose=purpose, attempt=attempt,
+                           model=model, error=str(e))
             if attempt < max_retries - 1:
                 time.sleep(backoff * (2 ** attempt))
     raise last_err if last_err else RuntimeError("claude call failed")
-
-
-def _resolve_tested_model(queries: GraphQueries, test_id: str) -> str | None:
-    cypher = (
-        "MATCH (t {unique_id: $id})-[:TESTS]->(x) "
-        "RETURN x.unique_id AS uid, x.model_unique_id AS model, labels(x)[0] AS label LIMIT 1"
-    )
-    with queries.driver.session() as session:
-        rec = session.run(cypher, id=test_id).single()
-    if not rec:
-        return None
-    if rec["label"] == "Column" and rec["model"]:
-        return str(rec["model"])
-    return str(rec["uid"])
 
 
 def _collect_exposures(queries: GraphQueries, node_id: str) -> list[dict]:
@@ -126,24 +136,40 @@ def run_agent(
     decay = float(config["risk_scoring"].get("distance_decay", 0.15))
     exp_boost = float(config["risk_scoring"].get("exposure_priority_boost", 1.15))
     severity_mods = config.get("severity_modifiers")
+    run_id = uuid.uuid4().hex[:12]
+    rlog = log.bind(run_id=run_id, source_node_id=event.source_node_id)
     ctx: dict[str, Any] = {"base_nodes": set(), "mat": {}, "conf": {}, "dist": {}, "trace": []}
 
     def _trace(node: str, **fields: Any) -> None:
-        ctx["trace"].append({"node": node, **fields})
-        log.info(node, **fields)
+        elapsed = time.perf_counter() - ctx.get("_t0", time.perf_counter())
+        ctx["trace"].append({"node": node, "elapsed_s": round(elapsed, 4), **fields})
+        ctx["_t0"] = time.perf_counter()
+        rlog.info(node, **fields)
 
     # -- nodes ----------------------------------------------------------------
 
     def receive_event(state: AgentState) -> dict:
+        ctx["_t0"] = time.perf_counter()
         meta = queries.node_metadata(state.event.source_node_id)
         ctx["root_meta"] = meta
         ctx["abort"] = meta is None
         key = incident_key(state.event)
         prior = incident_store.prior_occurrences(key)
         ctx["incident_key"] = key
+        errors: list = []
+        if meta is None:
+            # Loud failure: a referenced node missing from the graph is a
+            # silent-false-negative risk, so surface it rather than scoring low.
+            msg = (
+                f"node not found in graph: {state.event.source_node_id} "
+                f"(stale lineage or id mismatch?)"
+            )
+            rlog.error("node_not_found", node_id=state.event.source_node_id)
+            errors.append(msg)
         _trace("receive_event", node_id=state.event.source_node_id,
                found=meta is not None, prior_occurrences=prior)
-        return {"incident_key": key, "prior_occurrences": prior}
+        return {"incident_key": key, "prior_occurrences": prior,
+                "run_id": run_id, "errors": errors}
 
     def traverse_forward(state: AgentState) -> dict:
         ev = state.event
@@ -155,7 +181,7 @@ def run_agent(
         dist: dict[str, int] = {}
 
         if atype == "test_failure":
-            model_id = _resolve_tested_model(queries, ev.source_node_id)
+            model_id = queries.tested_model(ev.source_node_id)
             if model_id:
                 downstream = queries.downstream_models(model_id)
                 paths = [[model_id, d["unique_id"]] for d in downstream] or [[model_id]]
@@ -266,10 +292,13 @@ def run_agent(
         key = ctx["incident_key"]
         window = int(agent_cfg.get("dedup_window_minutes", 60))
         is_dup = incident_store.is_duplicate(key, window)
-        if is_dup:
-            for a in actions:
-                if a.action_type in ("slack_alert", "github_pr"):
-                    a.payload["suppressed_duplicate"] = True
+        day = datetime.utcnow().strftime("%Y%m%d")
+        for a in actions:
+            # Deterministic idempotency key so Phase 6 executors can dedupe at
+            # the Slack/GitHub boundary (exactly-once side effects).
+            a.payload["idempotency_key"] = f"{key}:{day}:{a.action_type}"
+            if is_dup and a.action_type in ("slack_alert", "github_pr"):
+                a.payload["suppressed_duplicate"] = True
         count = incident_store.record(key, state.event, state.overall_risk)
         requires_approval = bool(agent_cfg.get("require_approval", False)) and any(
             a.action_type in ("github_pr", "pause_dbt_run") for a in actions
@@ -285,9 +314,10 @@ def run_agent(
     def generate_summary(state: AgentState) -> dict:
         payload = _summary_payload(state, ctx)
         try:
-            summary = _claude_text(
+            summary, _ = _claude_text(
                 anthropic_client, _prompt("impact_summary.txt"),
                 json.dumps(payload, indent=2), MAX_SUMMARY_TOKENS, agent_cfg,
+                logger=rlog, purpose="summary",
             )
         except Exception as e:  # noqa: BLE001 - never fail the pipeline on LLM error
             summary = (
@@ -314,18 +344,27 @@ def run_agent(
             f"Compiled SQL of the affected staging model:\n{staging_sql}"
         )
         try:
-            fix = _claude_text(
+            fix, fix_model = _claude_text(
                 anthropic_client, _prompt("fix_generation.txt"), user,
-                MAX_FIX_TOKENS, agent_cfg,
+                MAX_FIX_TOKENS, agent_cfg, logger=rlog, purpose="fix",
             )
         except Exception:  # noqa: BLE001
-            fix = ""
+            fix, fix_model = "", ""
         if fix and _valid_sql(fix):
             for action in actions:
                 if action.action_type == "github_pr":
                     action.payload["fix_sql"] = fix
                     action.payload["model_path"] = ctx.get("staging_path", "")
-            _trace("generate_fix", valid=True)
+                    # Provenance + mandatory review: LLM-authored SQL must never
+                    # be auto-merged (untrusted-data -> LLM -> committed code).
+                    action.payload["fix_provenance"] = {
+                        "generated_by": "llm",
+                        "model": fix_model,
+                        "generated_at": datetime.utcnow().isoformat(),
+                        "validated": "sqlglot_parse",
+                    }
+                    action.payload["requires_human_review"] = True
+            _trace("generate_fix", valid=True, model=fix_model)
             return {"fix_suggestion": fix, "recommended_actions": actions}
         _trace("generate_fix", valid=False)
         return {

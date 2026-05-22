@@ -53,6 +53,7 @@ class DataQualityMonitor:
         row_counts: dict[str, int] = {}
         null_ratios: dict[str, dict[str, float]] = {}
         value_ranges: dict[str, dict[str, tuple[float, float]]] = {}
+        value_stats: dict[str, dict[str, dict[str, float]]] = {}
 
         for table in source_tables:
             key = f"{self.raw_schema}.{table}"
@@ -62,6 +63,9 @@ class DataQualityMonitor:
                 selects.append(f"sum(case when {_bt(c)} is null then 1 else 0 end) AS null__{c}")
                 selects.append(f"min(try_cast({_bt(c)} as double)) AS min__{c}")
                 selects.append(f"max(try_cast({_bt(c)} as double)) AS max__{c}")
+                selects.append(f"avg(try_cast({_bt(c)} as double)) AS avg__{c}")
+                selects.append(f"stddev(try_cast({_bt(c)} as double)) AS std__{c}")
+                selects.append(f"count(try_cast({_bt(c)} as double)) AS cnt__{c}")
             query = f"SELECT {', '.join(selects)} FROM {self._fq(table)}"
 
             cursor = self.conn.cursor()
@@ -76,16 +80,23 @@ class DataQualityMonitor:
             row_counts[key] = total
             null_ratios[key] = {}
             value_ranges[key] = {}
+            value_stats[key] = {}
             for c in cols:
                 nulls = int(row.get(f"null__{c}") or 0)
                 null_ratios[key][c] = (nulls / total) if total else 0.0
                 cmin, cmax = row.get(f"min__{c}"), row.get(f"max__{c}")
                 if cmin is not None and cmax is not None:
                     value_ranges[key][c] = (float(cmin), float(cmax))
+                    value_stats[key][c] = {
+                        "mean": float(row.get(f"avg__{c}") or 0.0),
+                        "stddev": float(row.get(f"std__{c}") or 0.0),
+                        "count": float(row.get(f"cnt__{c}") or 0.0),
+                    }
         return QualityBaseline(
             row_counts=row_counts,
             null_ratios=null_ratios,
             value_ranges=value_ranges,
+            value_stats=value_stats,
             captured_at=datetime.utcnow(),
         )
 
@@ -99,6 +110,8 @@ class DataQualityMonitor:
         now = datetime.utcnow()
         drop_ratio = float(self.config.get("row_count_drop_ratio", 0.20))
         null_delta = float(self.config.get("null_ratio_spike_delta", 0.10))
+        n_sigma = float(self.config.get("value_range_breach_stddev", 3.0))
+        min_samples = int(self.config.get("min_baseline_samples", 5))
 
         for table in tables:
             key = f"{self.raw_schema}.{table}"
@@ -148,25 +161,48 @@ class DataQualityMonitor:
                         )
                     )
 
+            prev_stats = previous.value_stats.get(key, {})
             prev_ranges = previous.value_ranges.get(key, {})
             cur_ranges = current.value_ranges.get(key, {})
-            for col, (cur_min, _cur_max) in cur_ranges.items():
-                prev_range = prev_ranges.get(col)
-                if prev_range and prev_range[0] >= 0 and cur_min < 0:
-                    events.append(
-                        AnomalyEvent(
+            for col, (cur_min, cur_max) in cur_ranges.items():
+                stats = prev_stats.get(col)
+                event = None
+                # Primary: sigma-based detection against the prior distribution.
+                if stats and stats.get("count", 0) >= min_samples and stats.get("stddev", 0) > 0:
+                    mean, std = stats["mean"], stats["stddev"]
+                    lo, hi = mean - n_sigma * std, mean + n_sigma * std
+                    if cur_min < lo or cur_max > hi:
+                        event = AnomalyEvent(
                             anomaly_type=AnomalyType.VALUE_RANGE_BREACH,
                             severity=Severity.ERROR,
                             source_node_id=node_id,
                             source_column=col,
                             description=(
-                                f"Column {key}.{col} now has negative values "
-                                f"(min {cur_min}); was previously non-negative"
+                                f"Column {key}.{col} range [{cur_min:.4g}, {cur_max:.4g}] "
+                                f"breaches {n_sigma:g}σ band "
+                                f"[{lo:.4g}, {hi:.4g}] (mean {mean:.4g}, σ {std:.4g})"
                             ),
-                            previous_value=f"min {prev_range[0]}",
-                            current_value=f"min {cur_min}",
+                            previous_value=f"{n_sigma:g}σ band [{lo:.4g}, {hi:.4g}]",
+                            current_value=f"[{cur_min:.4g}, {cur_max:.4g}]",
                             detected_at=now,
-                            metadata={"table": key},
+                            metadata={"table": key, "method": "sigma", "n_sigma": n_sigma},
                         )
+                # Fallback: when no usable distribution, flag a sign flip to negative.
+                elif (prev_range := prev_ranges.get(col)) and prev_range[0] >= 0 and cur_min < 0:
+                    event = AnomalyEvent(
+                        anomaly_type=AnomalyType.VALUE_RANGE_BREACH,
+                        severity=Severity.ERROR,
+                        source_node_id=node_id,
+                        source_column=col,
+                        description=(
+                            f"Column {key}.{col} now has negative values "
+                            f"(min {cur_min}); was previously non-negative"
+                        ),
+                        previous_value=f"min {prev_range[0]}",
+                        current_value=f"min {cur_min}",
+                        detected_at=now,
+                        metadata={"table": key, "method": "sign_flip"},
                     )
+                if event:
+                    events.append(event)
         return events
