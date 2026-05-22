@@ -56,6 +56,11 @@ def _node_props(node: Any) -> dict[str, Any]:
             props[key] = val
     if node.compiled_sql:
         props["compiled_sql"] = node.compiled_sql
+    # Flatten selected meta (e.g. exposure type/priority) into node properties.
+    for mkey in ("type", "priority", "maturity"):
+        mval = node.meta.get(mkey)
+        if mval is not None and mval != "":
+            props[f"exposure_{mkey}" if mkey == "type" else mkey] = mval
     return props
 
 

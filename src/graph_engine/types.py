@@ -33,6 +33,7 @@ class GraphNode:
     columns: dict[str, ColumnInfo]
     row_count: int | None        # From catalog.json
     depends_on: list[str]        # unique_ids this node depends on
+    meta: dict = field(default_factory=dict)  # extras, e.g. exposure {type, priority}
 
 
 @dataclass

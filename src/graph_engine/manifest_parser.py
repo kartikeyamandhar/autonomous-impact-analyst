@@ -174,6 +174,7 @@ def parse_dbt_artifacts(manifest_path: str, catalog_path: str) -> DbtGraph:
     for uid, node in manifest.get("exposures", {}).items():
         depends_on = list(node.get("depends_on", {}).get("nodes", []))
         owner = node.get("owner", {})
+        exposure_meta = node.get("meta", {}) or {}
         nodes[uid] = GraphNode(
             unique_id=uid,
             resource_type="exposure",
@@ -189,6 +190,11 @@ def parse_dbt_artifacts(manifest_path: str, catalog_path: str) -> DbtGraph:
             columns={},
             row_count=None,
             depends_on=depends_on,
+            meta={
+                "type": node.get("type"),
+                "priority": exposure_meta.get("priority"),
+                "maturity": node.get("maturity"),
+            },
         )
         for mart_uid in depends_on:
             edges.append(GraphEdge(source_id=uid, target_id=mart_uid, edge_type="consumes"))

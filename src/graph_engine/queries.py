@@ -28,7 +28,8 @@ class GraphQueries:
             "MATCH (n {unique_id: $id}) "
             "RETURN n.unique_id AS unique_id, n.name AS name, n.layer AS layer, "
             "n.materialization AS materialization, n.resource_type AS resource_type, "
-            "n.compiled_sql AS compiled_sql, labels(n)[0] AS label LIMIT 1"
+            "n.compiled_sql AS compiled_sql, n.priority AS priority, "
+            "n.exposure_type AS exposure_type, labels(n)[0] AS label LIMIT 1"
         )
         with self.driver.session() as session:
             rec = session.run(cypher, id=node_id).single()
@@ -58,16 +59,16 @@ class GraphQueries:
     def column_lineage_forward(self, model_id: str, column: str) -> list[dict]:
         col_id = f"{model_id}.{column}"
         cypher = (
-            "MATCH path = (c:Column {unique_id: $col})<-[:DERIVES_FROM*]-(d:Column) "
-            "RETURN nodes(path) AS ns"
+            "MATCH path = (c:Column {unique_id: $col})<-[rels:DERIVES_FROM*]-(d:Column) "
+            "RETURN nodes(path) AS ns, [r IN rels | r.confidence] AS confs"
         )
         return self._paths_as_columns(cypher, col=col_id)
 
     def column_lineage_backward(self, model_id: str, column: str) -> list[dict]:
         col_id = f"{model_id}.{column}"
         cypher = (
-            "MATCH path = (c:Column {unique_id: $col})-[:DERIVES_FROM*]->(u:Column) "
-            "RETURN nodes(path) AS ns"
+            "MATCH path = (c:Column {unique_id: $col})-[rels:DERIVES_FROM*]->(u:Column) "
+            "RETURN nodes(path) AS ns, [r IN rels | r.confidence] AS confs"
         )
         return self._paths_as_columns(cypher, col=col_id)
 
@@ -79,7 +80,8 @@ class GraphQueries:
                     {"model": n.get("model_unique_id"), "column": n.get("name")}
                     for n in record["ns"]
                 ]
-                out.append({"path": path})
+                confs = [c for c in (record["confs"] or []) if c is not None]
+                out.append({"path": path, "confidence": min(confs) if confs else 1.0})
         return out
 
     # -- test coverage --------------------------------------------------------

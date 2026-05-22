@@ -22,6 +22,34 @@ risk_scoring:
     medium: 0.60
     high: 0.85
 
+  # Contextual modifiers applied after the base weighted score.
+  # Decay is intentionally mild: in a lineage DAG the most important nodes
+  # (marts feeding exposures) are far from the source, so heavy distance decay
+  # would wrongly suppress them.
+  distance_decay: 0.05            # slight risk decay per hop from the anomaly source
+  exposure_priority_boost: 1.15   # escalate when a high-priority exposure is reached
+
+# Per-anomaly-severity multiplier applied to node scores.
+severity_modifiers:
+  info: 0.85
+  warning: 0.95
+  error: 1.10
+  critical: 1.25
+
+# ---------------------------------------------------------------------------
+# Agent (LangGraph) runtime
+# ---------------------------------------------------------------------------
+agent:
+  model: claude-haiku-4-5-20251001
+  fallback_model: claude-sonnet-4-6   # used after the primary model fails
+  max_retries: 3
+  retry_backoff_seconds: 2
+  prompt_caching: true
+  require_approval: false              # hold github_pr / pause_dbt_run for human approval
+  dedup_window_minutes: 60            # suppress duplicate actions within this window
+  incident_dir: data/incidents
+  correlation_window_minutes: 15      # group simultaneous anomalies into one incident
+
 # ---------------------------------------------------------------------------
 # Monitoring scope and cadence
 # ---------------------------------------------------------------------------

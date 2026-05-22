@@ -50,6 +50,45 @@ def score_node(
     return min(raw_score * modifier, 1.0)
 
 
+_SEVERITY_MODIFIER = {
+    "info": 0.85,
+    "warning": 0.95,
+    "error": 1.1,
+    "critical": 1.25,
+}
+
+
+def apply_modifiers(
+    base_score: float,
+    severity: str | None = None,
+    confidence: float = 1.0,
+    distance_from_source: int = 0,
+    reaches_high_priority_exposure: bool = False,
+    distance_decay: float = 0.15,
+    exposure_priority_boost: float = 1.15,
+    severity_modifiers: dict | None = None,
+) -> float:
+    """Refine a base node score with contextual factors (deterministic).
+
+    - severity: scale by how severe the triggering anomaly is.
+    - confidence: column-lineage certainty (0.5-1.0); low confidence => the
+      column may not really flow here, so dampen the score.
+    - distance_from_source: mild decay the further a node is from the anomaly.
+    - reaches_high_priority_exposure: escalate if a high-priority consumer is hit.
+    """
+    sev_table = severity_modifiers or _SEVERITY_MODIFIER
+    sev = sev_table.get(_normalize(severity) if severity else "", 1.0)
+    decay = 1.0 / (1.0 + distance_decay * max(distance_from_source, 0))
+    # Confidence nudges, not halves: lineage-tracing uncertainty shouldn't
+    # erase a real impact. 0.5 conf -> 0.85 factor, 1.0 conf -> 1.0 factor.
+    conf = max(min(confidence, 1.0), 0.0)
+    conf_factor = 0.7 + 0.3 * conf
+    score = base_score * sev * conf_factor * decay
+    if reaches_high_priority_exposure:
+        score *= exposure_priority_boost
+    return min(score, 1.0)
+
+
 def aggregate_risk(
     node_scores: dict[str, float], thresholds: dict
 ) -> Literal["low", "medium", "high", "critical"]:

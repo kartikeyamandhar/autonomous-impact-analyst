@@ -79,4 +79,11 @@ def plan_actions(
                 )
             )
 
+    # Human-in-the-loop gate: high-impact actions are held pending approval
+    # rather than auto-executed when require_approval is set (#10).
+    if config.get("agent", {}).get("require_approval", False):
+        for action in actions:
+            if action.action_type in ("github_pr", "pause_dbt_run"):
+                action.payload["status"] = "pending_approval"
+
     return sorted(actions, key=lambda a: a.priority)

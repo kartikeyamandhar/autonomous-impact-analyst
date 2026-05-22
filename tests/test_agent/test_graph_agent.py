@@ -5,9 +5,15 @@ from datetime import datetime
 import pytest
 
 from src.agent.graph_agent import run_agent
+from src.agent.incident_store import IncidentStore
 from src.anomaly_detection.anomaly_events import AnomalyEvent, AnomalyType, Severity
 
 pytestmark = pytest.mark.phase_5
+
+
+@pytest.fixture
+def store(tmp_path) -> IncidentStore:
+    return IncidentStore(str(tmp_path / "incidents"))
 
 PKG = "autonomous_impact_analyst"
 SRC = f"source.{PKG}.coingecko.coingecko_coins_markets"
@@ -90,10 +96,10 @@ def _event(atype, column="current_price"):
     )
 
 
-def test_agent_traverses_and_scores(settings):
+def test_agent_traverses_and_scores(settings, store):
     state = run_agent(
         _event(AnomalyType.NULL_RATIO_SPIKE), None, FakeClient("a summary"),
-        settings, queries=FakeQueries(),
+        settings, queries=FakeQueries(), incident_store=store,
     )
     assert len(state.affected_paths) == 1
     assert state.affected_paths[0] == [SRC, STG, INT, FCT]
@@ -103,22 +109,22 @@ def test_agent_traverses_and_scores(settings):
     assert state.impact_summary == "a summary"
 
 
-def test_agent_slack_payload_filled(settings):
+def test_agent_slack_payload_filled(settings, store):
     state = run_agent(
         _event(AnomalyType.NULL_RATIO_SPIKE), None, FakeClient("the summary"),
-        settings, queries=FakeQueries(),
+        settings, queries=FakeQueries(), incident_store=store,
     )
     slack = [a for a in state.recommended_actions if a.action_type == "slack_alert"]
     assert slack and slack[0].payload["summary"] == "the summary"
 
 
-def test_agent_schema_change_generates_fix(settings):
+def test_agent_schema_change_generates_fix(settings, store):
     state = run_agent(
         _event(AnomalyType.TYPE_CHANGED),
         None,
         FakeClient("SELECT id AS coin_id, try_cast(current_price AS decimal(38,8)) FROM raw.t"),
         settings,
-        queries=FakeQueries(),
+        queries=FakeQueries(), incident_store=store,
     )
     action_types = [a.action_type for a in state.recommended_actions]
     assert "github_pr" in action_types
@@ -127,26 +133,26 @@ def test_agent_schema_change_generates_fix(settings):
     assert pr.payload["fix_sql"] == state.fix_suggestion
 
 
-def test_agent_invalid_fix_drops_pr(settings):
+def test_agent_invalid_fix_drops_pr(settings, store):
     state = run_agent(
         _event(AnomalyType.TYPE_CHANGED),
         None,
         FakeClient("this is not valid sql !!!"),
         settings,
-        queries=FakeQueries(),
+        queries=FakeQueries(), incident_store=store,
     )
     assert state.fix_suggestion is None
     assert "github_pr" not in [a.action_type for a in state.recommended_actions]
 
 
-def test_agent_aborts_on_unknown_node(settings):
+def test_agent_aborts_on_unknown_node(settings, store):
     class Empty(FakeQueries):
         def node_metadata(self, node_id):
             return None
 
     state = run_agent(
         _event(AnomalyType.NULL_RATIO_SPIKE), None, FakeClient("x"),
-        settings, queries=Empty(),
+        settings, queries=Empty(), incident_store=store,
     )
     assert state.affected_paths == []
     assert state.overall_risk == "low"

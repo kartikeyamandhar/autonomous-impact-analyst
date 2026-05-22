@@ -37,3 +37,10 @@ class AgentState:
     # Output
     impact_summary: str = ""
     fix_suggestion: str | None = None
+
+    # Enhancements
+    summary_payload: dict = field(default_factory=dict)  # structured summary (#15)
+    incident_key: str = ""           # stable identity for dedup/memory (#7/#13)
+    prior_occurrences: int = 0       # times this incident was seen before this run (#13)
+    requires_approval: bool = False  # high-impact actions held for human approval (#10)
+    correlated_events: list = field(default_factory=list)  # other events in the incident (#11)
