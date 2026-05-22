@@ -20,6 +20,20 @@ class GraphQueries:
     def __init__(self, driver: Any) -> None:
         self.driver = driver
 
+    # -- node resolution ------------------------------------------------------
+
+    def node_metadata(self, node_id: str) -> dict | None:
+        """Resolve a unique_id to its node properties, or None if absent."""
+        cypher = (
+            "MATCH (n {unique_id: $id}) "
+            "RETURN n.unique_id AS unique_id, n.name AS name, n.layer AS layer, "
+            "n.materialization AS materialization, n.resource_type AS resource_type, "
+            "n.compiled_sql AS compiled_sql, labels(n)[0] AS label LIMIT 1"
+        )
+        with self.driver.session() as session:
+            rec = session.run(cypher, id=node_id).single()
+            return dict(rec) if rec else None
+
     # -- model-level traversal ------------------------------------------------
 
     def downstream_models(self, model_id: str) -> list[dict]:

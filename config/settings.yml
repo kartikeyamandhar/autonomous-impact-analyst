@@ -8,14 +8,14 @@
 # Weights MUST sum to exactly 1.0.
 # ---------------------------------------------------------------------------
 risk_scoring:
+  # Consumed by src/agent/risk_scorer.score_node(). Weights MUST sum to 1.0.
   weights:
-    distance_to_exposure: 0.30   # closer to an exposure -> higher risk
-    fan_out: 0.20                # more downstream dependents -> higher risk
-    test_coverage_gap: 0.25      # uncovered nodes -> higher risk
-    severity: 0.15               # anomaly severity -> higher risk
-    column_lineage_match: 0.10   # column actually flows through -> higher risk
+    test_coverage: 0.30       # uncovered nodes -> higher risk
+    fan_out: 0.25             # more downstream dependents -> higher risk
+    exposure_distance: 0.25   # closer to an exposure -> higher risk
+    materialization: 0.20     # views recompute live -> higher risk than tables
 
-  # Thresholds bucket an overall risk score into a discrete level.
+  # Thresholds bucket the max node score into a discrete level.
   # MUST be strictly ascending: low < medium < high.
   thresholds:
     low: 0.30
