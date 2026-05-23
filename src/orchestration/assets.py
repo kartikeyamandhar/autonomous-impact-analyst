@@ -18,6 +18,8 @@ import yaml  # type: ignore[import-untyped]
 from dagster import asset
 from dotenv import load_dotenv
 
+from src.utils.retry import retry
+
 load_dotenv()
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -44,6 +46,7 @@ def _config() -> dict:
         return yaml.safe_load(f)
 
 
+@retry(max_attempts=3, exceptions=(Exception,))
 def _databricks():
     from databricks import sql
 
@@ -54,13 +57,16 @@ def _databricks():
     )
 
 
+@retry(max_attempts=3, exceptions=(Exception,))
 def _neo4j():
     from neo4j import GraphDatabase
 
-    return GraphDatabase.driver(
+    driver = GraphDatabase.driver(
         os.environ["NEO4J_URI"],
         auth=(os.environ["NEO4J_USER"], os.environ["NEO4J_PASSWORD"]),
     )
+    driver.verify_connectivity()
+    return driver
 
 
 def _serialize_event(ev: Any) -> dict:

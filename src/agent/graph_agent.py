@@ -26,14 +26,9 @@ from src.agent.incident_store import IncidentStore, incident_key
 from src.agent.risk_scorer import aggregate_risk, apply_modifiers, score_node
 from src.agent.types import AgentState
 from src.graph_engine.queries import GraphQueries
+from src.logging_config import configure_logging
 
-structlog.configure(
-    processors=[
-        structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.KeyValueRenderer(key_order=["run_id", "event"]),
-    ],
-)
+configure_logging()
 log = structlog.get_logger("impact_agent")
 
 _PROMPT_DIR = Path(__file__).parent / "prompts"
@@ -509,6 +504,7 @@ def _valid_sql(sql: str) -> bool:
 
 
 def main() -> None:
+    import argparse
     from datetime import datetime
 
     import yaml  # type: ignore[import-untyped]
@@ -519,6 +515,11 @@ def main() -> None:
     from src.anomaly_detection.anomaly_events import AnomalyEvent, AnomalyType, Severity
 
     load_dotenv()
+    parser = argparse.ArgumentParser(description="Run the impact agent on a demo event")
+    parser.add_argument("--execute", action="store_true",
+                        help="execute the planned actions (send Slack / open PR)")
+    args = parser.parse_args()
+
     event = AnomalyEvent(
         anomaly_type=AnomalyType.NULL_RATIO_SPIKE,
         severity=Severity.WARNING,
@@ -540,6 +541,10 @@ def main() -> None:
     print("Actions:", [a.action_type for a in state.recommended_actions])
     print("Prior occurrences:", state.prior_occurrences)
     print("Summary:", state.impact_summary[:300])
+    if args.execute:
+        from src.actions.executor import execute_actions
+
+        print("Executed:", execute_actions(state, config))
     driver.close()
 
 

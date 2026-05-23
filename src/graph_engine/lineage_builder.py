@@ -169,8 +169,4 @@ def extract_column_lineage(
         pct,
         len(edges),
     )
-    print(
-        f"column lineage: resolved {resolved_columns}/{total_columns} "
-        f"columns ({pct:.1f}%), {len(edges)} edges"
-    )
     return edges

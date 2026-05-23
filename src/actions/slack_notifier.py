@@ -7,6 +7,8 @@ from typing import Any
 
 from slack_sdk.webhook import WebhookClient
 
+from src.utils.retry import retry
+
 logger = logging.getLogger(__name__)
 
 # Slack text fields cap at 3000 chars; leave headroom.
@@ -85,12 +87,16 @@ class SlackNotifier:
         })
         return blocks
 
+    @retry(max_attempts=3, exceptions=(Exception,))
+    def _send(self, text: str, attachments: list[dict]) -> Any:
+        return self.client.send(text=text, attachments=attachments)
+
     def send_impact_alert(self, state: Any, pr_url: str | None = None) -> bool:
         risk = state.overall_risk
         try:
-            resp = self.client.send(
-                text=f"Impact alert: {state.overall_risk} risk",
-                attachments=[{
+            resp = self._send(
+                f"Impact alert: {state.overall_risk} risk",
+                [{
                     "color": _RISK_COLOR.get(risk, "#cccccc"),
                     "blocks": self.build_blocks(state, pr_url),
                 }],

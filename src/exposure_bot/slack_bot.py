@@ -122,12 +122,20 @@ class ExposureBot:
 
 
 def main() -> None:
+    import argparse
     import os
 
     from databricks import sql
     from dotenv import load_dotenv
 
     load_dotenv()
+    parser = argparse.ArgumentParser(description="DeFi market exposure bot")
+    parser.add_argument("--once", action="store_true",
+                        help="post a single summary and exit (default)")
+    parser.add_argument("--interval", type=int, default=None,
+                        help="post on a loop every N minutes")
+    args = parser.parse_args()
+
     conn = sql.connect(
         server_hostname=os.environ["DATABRICKS_HOST"],
         http_path=os.environ["DATABRICKS_HTTP_PATH"],
@@ -136,8 +144,13 @@ def main() -> None:
     bot = ExposureBot(
         os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_BOT_CHANNEL"], MartQueries(conn)
     )
-    print("Posted:", bot.post_market_summary())
-    conn.close()
+    try:
+        if args.interval:
+            bot.start_scheduled(args.interval)
+        else:
+            print("Posted:", bot.post_market_summary())
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
