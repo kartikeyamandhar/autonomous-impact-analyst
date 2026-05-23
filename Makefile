@@ -39,3 +39,6 @@ bot-start:
 
 demo:
 	bash scripts/demo.sh
+
+web:
+	uvicorn src.web.app:app --host 127.0.0.1 --port 8000

@@ -1,5 +1,6 @@
-# Documentation (local only)
+# Documentation (local only) — but DO publish the root README on GitHub
 *.md
+!README.md
 specs/
 
 # Python

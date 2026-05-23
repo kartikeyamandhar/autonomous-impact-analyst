@@ -82,6 +82,27 @@ class GitHubPRCreator:
             logger.warning("could not add labels: %s", e)
         return str(pr.html_url)
 
+    def merge_pr(self, number: int, method: str = "squash") -> dict:
+        """Merge a PR by number; close it as a fallback if merge is blocked."""
+        pr = self.repo.get_pull(number)
+        try:
+            result = pr.merge(merge_method=method)
+            return {"merged": bool(result.merged), "message": result.message}
+        except GithubException as e:
+            logger.warning("merge failed for #%d: %s; closing instead", number, e)
+            pr.edit(state="closed")
+            return {"merged": False, "message": f"merge failed; PR #{number} closed"}
+
+    def close_pr(self, number: int, comment: str | None = None) -> None:
+        pr = self.repo.get_pull(number)
+        if comment:
+            pr.create_issue_comment(comment)
+        pr.edit(state="closed")
+
+    @staticmethod
+    def pr_number_from_url(url: str) -> int:
+        return int(url.rstrip("/").split("/")[-1])
+
     @staticmethod
     def _pr_body(event: Any, impact_summary: str, risk_level: str) -> str:
         atype = getattr(event.anomaly_type, "value", event.anomaly_type)

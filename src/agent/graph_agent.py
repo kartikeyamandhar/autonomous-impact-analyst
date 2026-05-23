@@ -490,7 +490,7 @@ def _affected_staging_sql(queries: GraphQueries, ctx: dict, state: AgentState) -
     for node in ordered:
         meta = queries.node_metadata(node)
         if meta and meta.get("layer") == "staging" and meta.get("compiled_sql"):
-            ctx["staging_path"] = f"models/staging/{meta.get('name')}.sql"
+            ctx["staging_path"] = f"src/dbt_project/models/staging/{meta.get('name')}.sql"
             return str(meta["compiled_sql"])
     return None
 
