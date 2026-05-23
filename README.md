@@ -15,16 +15,6 @@
 
 > **Break a column → the lineage blast radius lights up, a Slack alert fires, and a GitHub PR opens. Approve the PR → the fix merges and the graph heals.** All the *reasoning* (impact, risk, actions) is deterministic graph work; an LLM is used only to phrase the alert and draft the SQL fix (which is validated before it can become a PR).
 
-<div align="center">
-
-### ▶️ Live demo
-
-![demo](docs/demo.gif)
-
-<sub>Record `make web` (break → Slack → PR → approve → heal) and drop the clip at <code>docs/demo.gif</code>.</sub>
-
-</div>
-
 ---
 
 ## What it is
@@ -65,6 +55,44 @@ flowchart LR
     DAG[Dagster: 7 assets, every 15 min] -.orchestrates.-> AG
 ```
 
+## Data model — the dbt lineage DAG
+
+The warehouse is a 4-layer dependency graph. This is the structure the agent traverses to compute blast radius.
+
+```mermaid
+flowchart LR
+    subgraph SRC[Sources]
+      s1[coins_markets]; s2[coins_detail]; s3[exchanges]
+      s4[protocols]; s5[yields_pools]; s6[eth_txns]; s7[token_transfers]
+    end
+    subgraph STG[Staging - views]
+      g1[stg_coins_markets]; g2[stg_coins_detail]; g3[stg_exchanges]
+      g4[stg_protocols]; g5[stg_yields]; g6[stg_transactions]; g7[stg_token_transfers]
+    end
+    subgraph INT[Intermediate - views]
+      i1[int_token_profiles]; i2[int_protocol_metrics]
+      i3[int_whale_activity]; i4[int_exchange_token_coverage]
+    end
+    subgraph MART[Marts - tables]
+      f1[fct_daily_token_metrics]; f2[fct_protocol_health]; f3[fct_whale_movements]
+      d1[dim_tokens]; d2[dim_protocols]; d3[dim_exchanges]
+    end
+    subgraph EXP[Exposures]
+      e1{{defi_market_slack_bot}}; e2{{whale_alert_pipeline}}
+    end
+    s1-->g1; s2-->g2; s3-->g3; s4-->g4; s5-->g5; s6-->g6; s7-->g7
+    g1-->i1; g2-->i1; g4-->i1; g7-->i1
+    g4-->i2; g5-->i2
+    g6-->i3; g7-->i3
+    g3-->i4; g1-->i4
+    i1-->f1; i3-->f1
+    i2-->f2; i1-->f2
+    i3-->f3; i1-->f3
+    g2-->d1; g4-->d2; g3-->d3
+    f1-->e1; f2-->e1
+    f3-->e2; d1-->e2
+```
+
 ## The agent (LangGraph state machine)
 
 The agent is a flowchart of small Python functions over the graph. Reasoning is deterministic; Claude only writes the prose summary and a candidate SQL fix.
@@ -84,6 +112,26 @@ stateDiagram-v2
     generate_summary --> [*]
     generate_fix --> [*]
 ```
+
+## The knowledge graph (Neo4j model)
+
+The dbt artifacts + sqlglot lineage are loaded into Neo4j as a property graph the agent queries with Cypher (451 nodes / 624 relationships).
+
+```mermaid
+flowchart TD
+    SRC([Source]) -->|HAS_COLUMN| COL([Column])
+    MOD([Model]) -->|HAS_COLUMN| COL
+    MOD -->|DEPENDS_ON| UP([Model / Source])
+    COLd([Column downstream]) -->|DERIVES_FROM<br/>confidence 0.5–1.0| COLu([Column upstream])
+    TST([Test]) -->|TESTS| COL
+    EXP([Exposure]) -->|CONSUMES| MART([Mart model])
+```
+
+| Label | Count | Relationship | Meaning |
+|---|---|---|---|
+| `:Model` `:Source` `:Exposure` | 26 | `DEPENDS_ON` | dbt ref/source dependency |
+| `:Column` | 372 | `DERIVES_FROM` | column-level lineage (sqlglot) |
+| `:Test` | 53 | `HAS_COLUMN` / `TESTS` / `CONSUMES` | ownership / coverage / consumption |
 
 ## The interactive demo loop
 
@@ -110,6 +158,38 @@ sequenceDiagram
     API->>DBX: dbt build (restore data)
     API-->>UI: graph flips back to green
 ```
+
+## Example — breaking `current_price`
+
+When `current_price` is removed from the CoinGecko source, the agent follows the **column** lineage (red) and prunes models that don't use it (grey). The red path reaches a **high-priority exposure**, so risk = **critical**.
+
+```mermaid
+flowchart LR
+    src[coins_markets.current_price]:::bad --> stg[stg_coins_markets.current_price_usd]:::bad
+    stg --> itp[int_token_profiles]:::bad
+    itp --> fdm[fct_daily_token_metrics]:::bad
+    itp --> fph[fct_protocol_health]:::bad
+    fdm --> bot{{defi_market_slack_bot<br/>priority HIGH}}:::bad
+    fph --> bot
+    src -.pruned.-> cov[int_exchange_token_coverage]:::ok
+    classDef bad fill:#4a1414,stroke:#ff8a8a,color:#ffd0d0
+    classDef ok fill:#13202e,stroke:#33506e,color:#8aa0bd
+```
+
+## Risk scoring (deterministic)
+
+```mermaid
+flowchart LR
+    A[test coverage gap ×0.30] --> S((weighted sum))
+    B[fan-out ×0.25] --> S
+    C[exposure distance ×0.25] --> S
+    D[materialization ×0.20] --> S
+    S --> M[× anomaly modifier<br/>× severity × confidence<br/>× distance decay<br/>× exposure boost]
+    M --> R{aggregate}
+    R --> low[low]; R --> med[medium]; R --> high[high]; R --> crit[critical]
+```
+
+`score_node(test_coverage=0.0, fan_out=4, distance_to_exposure=1, materialization="table", anomaly="type_changed")` → `0.665 × 1.1 = 0.73`, refined by the contextual modifiers, then bucketed against the configured thresholds.
 
 ## Why a knowledge graph (not vector search)
 
@@ -164,6 +244,25 @@ make demo       # healthy summary -> inject anomaly -> agent alert -> degraded s
 make dagster-dev    # -> http://localhost:3000  (7 assets, 15-minute schedule)
 ```
 
+Dagster runs the whole loop as 7 dependency-ordered assets every 15 minutes:
+
+```mermaid
+flowchart LR
+    A[raw_data_sync]:::ing --> B[dbt_build]:::tf
+    B --> C[dbt_artifacts]:::tf
+    C --> D[neo4j_graph]:::gr
+    B --> E[anomaly_events]:::det
+    D --> E
+    E --> F[impact_reports]:::ag
+    F --> G[executed_actions]:::act
+    classDef ing fill:#15324a,stroke:#3aa0ff,color:#dbe9f7
+    classDef tf fill:#1d3b2a,stroke:#2ecc71,color:#dbf7e6
+    classDef gr fill:#2a2150,stroke:#7a5cc0,color:#e7e0ff
+    classDef det fill:#4a3a14,stroke:#e8b04a,color:#fff0c9
+    classDef ag fill:#4a2a14,stroke:#e8912d,color:#ffe0c2
+    classDef act fill:#4a1414,stroke:#ff8a8a,color:#ffd0d0
+```
+
 ## How it's built — 8 phases
 
 | Phase | What | Tag |
@@ -187,11 +286,6 @@ make dagster-dev    # -> http://localhost:3000  (7 assets, 15-minute schedule)
 - **Observability** — every agent run has a `run_id`, per-node timings, and logged LLM token usage (structlog; JSON in prod).
 - **Self-governing** — a critical-risk decision can pause dbt via a lock file the orchestrator honors on the next cycle.
 - **Calibration** — incidents + human feedback are recorded; `scripts/agent_metrics.py` reports the actionable rate.
-
-## Risk scoring (worked example)
-
-`score_node(test_coverage=0.0, fan_out=4, distance_to_exposure=1, materialization="table", anomaly="type_changed")`:
-`0.30·(1−0.0) + 0.25·min(4/10,1) + 0.25·(1/2) + 0.20·0.7 = 0.665`, × type-change modifier `1.1` = **0.73**, then refined by severity / lineage-confidence / distance-decay / high-priority-exposure boost. `aggregate_risk` buckets the max node score into `low / medium / high / critical`.
 
 ## Testing & CI
 
