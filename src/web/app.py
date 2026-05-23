@@ -247,12 +247,18 @@ def _approve_stream() -> Iterator[str]:
             yield _sse({"type": "error", "msg": "No active incident to approve."})
             return
 
-        merged = None
+        # Approve = accept the fix and heal, WITHOUT merging to main (no
+        # auto-generated SQL is ever committed to the default branch).
+        approved = None
         if INCIDENT["pr_number"]:
-            yield _sse({"type": "step", "name": "merge",
-                        "msg": f"Merging PR #{INCIDENT['pr_number']} to main…"})
+            yield _sse({"type": "step", "name": "approve",
+                        "msg": f"Approving PR #{INCIDENT['pr_number']} (resolving, not merging)…"})
             creator = GitHubPRCreator(os.environ["GITHUB_TOKEN"], os.environ["GITHUB_REPO"])
-            merged = creator.merge_pr(INCIDENT["pr_number"])
+            creator.close_pr(
+                INCIDENT["pr_number"],
+                comment="✅ Approved via Impact Analyst demo — resolving incident.",
+            )
+            approved = True
 
         yield _sse({"type": "step", "name": "rebuild",
                     "msg": "Rebuilding marts (dbt build) to restore the data…"})
@@ -264,7 +270,7 @@ def _approve_stream() -> Iterator[str]:
             "pr_url": None, "pr_number": None, "risk": None, "summary": None,
         })
         time.sleep(0.2)
-        yield _sse({"type": "done", "merged": merged})
+        yield _sse({"type": "done", "approved": approved})
     except Exception as e:  # noqa: BLE001
         yield _sse({"type": "error", "msg": str(e)})
 
