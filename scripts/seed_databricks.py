@@ -262,7 +262,8 @@ def fetch_etherscan_token_transfers() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def main() -> int:
+def run_seed() -> dict:
+    """Fetch all sources and load raw tables. Returns {tables_synced, rows}."""
     print(f"Connecting to Databricks ({DATABRICKS_HOST})...")
     conn = sql.connect(
         server_hostname=DATABRICKS_HOST,
@@ -285,19 +286,29 @@ def main() -> int:
         txs = fetch_etherscan_eth_transactions()
         transfers = fetch_etherscan_token_transfers()
 
+        tables = {
+            "coingecko_coins_markets": markets,
+            "coingecko_coins_detail": detail,
+            "coingecko_exchanges": exchanges,
+            "defi_llama_protocols": protocols,
+            "defi_llama_yields_pools": yields,
+            "etherscan_eth_transactions": txs,
+            "etherscan_token_transfers": transfers,
+        }
+        total = 0
         with conn.cursor() as cur:
             print("Writing raw tables...")
-            write_raw_table(cur, "coingecko_coins_markets", markets)
-            write_raw_table(cur, "coingecko_coins_detail", detail)
-            write_raw_table(cur, "coingecko_exchanges", exchanges)
-            write_raw_table(cur, "defi_llama_protocols", protocols)
-            write_raw_table(cur, "defi_llama_yields_pools", yields)
-            write_raw_table(cur, "etherscan_eth_transactions", txs)
-            write_raw_table(cur, "etherscan_token_transfers", transfers)
+            for name, records in tables.items():
+                total += write_raw_table(cur, name, records)
         print("Seed complete.")
-        return 0
+        return {"tables_synced": len(tables), "rows": total}
     finally:
         conn.close()
+
+
+def main() -> int:
+    run_seed()
+    return 0
 
 
 if __name__ == "__main__":
