@@ -273,6 +273,13 @@ def _break_stream(node_id: str, column: str | None, anomaly: str) -> Iterator[st
         state = run_agent(event, _driver(), _client(), cfg)
         affected = sorted({n for path in state.affected_paths for n in path})
         exposures = [e["unique_id"] for e in state.affected_exposures]
+        product_names = [
+            PRODUCT_NAMES[n.split(".")[-1]] for n in affected
+            if n.split(".")[-1] in PRODUCT_NAMES
+        ]
+        dashboard_names = [
+            DASHBOARD_NAMES.get(e["name"], e["name"]) for e in state.affected_exposures
+        ]
 
         # 3. Open a (mergeable) PR with the agent's fix, if any.
         pr_url = pr_number = None
@@ -287,13 +294,16 @@ def _break_stream(node_id: str, column: str | None, anomaly: str) -> Iterator[st
                 model_file_path=gh_action.payload.get(
                     "model_path", f"{DBT_DIR}/models/staging/stg_coingecko__coins_markets.sql"),
                 impact_summary=state.impact_summary, risk_level=state.overall_risk, draft=False,
+                affected_products=product_names, affected_dashboards=dashboard_names,
             )
             pr_number = GitHubPRCreator.pr_number_from_url(pr_url)
 
         # 4. Slack alert.
         yield _sse({"type": "step", "name": "alert", "msg": "Posting Slack impact alert…"})
         slack_ok = SlackNotifier(os.environ["SLACK_WEBHOOK_URL"]).send_impact_alert(
-            state, pr_url=pr_url)
+            state, pr_url=pr_url,
+            affected_products=product_names, affected_dashboards=dashboard_names,
+        )
 
         # 5. Record incident → drives the lane colouring.
         INCIDENT.update({
@@ -304,8 +314,8 @@ def _break_stream(node_id: str, column: str | None, anomaly: str) -> Iterator[st
         })
         yield _sse({
             "type": "done", "risk": state.overall_risk, "summary": state.impact_summary,
-            "affected": INCIDENT["broken"],
-            "exposures": [e["name"] for e in state.affected_exposures],
+            "affected": INCIDENT["broken"], "products": product_names,
+            "exposures": dashboard_names,
             "pruned": len(state.pruned_paths), "slack_sent": slack_ok, "pr_url": pr_url,
         })
     except Exception as e:  # noqa: BLE001
@@ -345,7 +355,7 @@ def _resolve_stream(approve: bool) -> Iterator[str]:
                         "msg": f"{verb}: closing PR #{INCIDENT['pr_number']} "
                                f"(never merged to main)…"})
             creator = GitHubPRCreator(os.environ["GITHUB_TOKEN"], os.environ["GITHUB_REPO"])
-            note = "✅ Approved via demo — resolving." if approve else "↩︎ Demo reset — closing."
+            note = "Approved via demo — resolving." if approve else "Demo reset — closing."
             creator.close_pr(INCIDENT["pr_number"], comment=note)
         yield _sse({"type": "step", "name": "rebuild",
                     "msg": "Rebuilding data products (dbt build) to restore the data…"})

@@ -20,9 +20,6 @@ _RISK_COLOR = {
     "high": "#e8912d",      # orange
     "critical": "#d00000",  # red
 }
-_RISK_EMOJI = {"low": "🟢", "medium": "🟡", "high": "🟠", "critical": "🔴"}
-
-
 def _truncate(text: str, limit: int = _TEXT_LIMIT) -> str:
     if len(text) <= limit:
         return text
@@ -33,14 +30,20 @@ class SlackNotifier:
     def __init__(self, webhook_url: str) -> None:
         self.client = WebhookClient(webhook_url)
 
-    def build_blocks(self, state: Any, pr_url: str | None = None) -> list[dict]:
+    def build_blocks(
+        self, state: Any, pr_url: str | None = None,
+        affected_products: list[str] | None = None,
+        affected_dashboards: list[str] | None = None,
+    ) -> list[dict]:
         ev = state.event
         atype = getattr(ev.anomaly_type, "value", ev.anomaly_type)
         severity = getattr(ev.severity, "value", ev.severity)
         risk = state.overall_risk
-        emoji = _RISK_EMOJI.get(risk, "⚪")
 
-        exposures = ", ".join(e.get("name", "?") for e in state.affected_exposures) or "none"
+        dashboards = affected_dashboards or [
+            e.get("name", "?") for e in state.affected_exposures
+        ]
+        products = affected_products or []
         gaps = [
             f"`{node.split('.')[-1]}` ({ratio:.0%})"
             for node, ratio in state.test_coverage_per_node.items()
@@ -51,7 +54,7 @@ class SlackNotifier:
             {
                 "type": "header",
                 "text": {"type": "plain_text",
-                         "text": _truncate(f"{emoji} {atype} — {severity}", 150)},
+                         "text": _truncate(f"{atype} — {severity} (risk: {risk})", 150)},
             },
             {
                 "type": "section",
@@ -61,11 +64,14 @@ class SlackNotifier:
             {
                 "type": "section",
                 "fields": [
-                    {"type": "mrkdwn", "text": f"*Risk:*\n{risk}"},
-                    {"type": "mrkdwn", "text": f"*Affected paths:*\n{len(state.affected_paths)}"},
-                    {"type": "mrkdwn", "text": f"*Exposures:*\n{_truncate(exposures, 500)}"},
+                    {"type": "mrkdwn", "text": f"*Overall risk:*\n{risk}"},
+                    {"type": "mrkdwn", "text": f"*Affected nodes:*\n{len(state.affected_paths)}"},
                     {"type": "mrkdwn",
-                     "text": f"*Recurrence:*\n#{state.prior_occurrences + 1}"},
+                     "text": "*Data products affected:*\n"
+                             + (_truncate(", ".join(products), 500) or "none")},
+                    {"type": "mrkdwn",
+                     "text": "*Dashboards at risk:*\n"
+                             + (_truncate(", ".join(dashboards), 500) or "none")},
                 ],
             },
         ]
@@ -91,14 +97,19 @@ class SlackNotifier:
     def _send(self, text: str, attachments: list[dict]) -> Any:
         return self.client.send(text=text, attachments=attachments)
 
-    def send_impact_alert(self, state: Any, pr_url: str | None = None) -> bool:
+    def send_impact_alert(
+        self, state: Any, pr_url: str | None = None,
+        affected_products: list[str] | None = None,
+        affected_dashboards: list[str] | None = None,
+    ) -> bool:
         risk = state.overall_risk
         try:
             resp = self._send(
                 f"Impact alert: {state.overall_risk} risk",
                 [{
                     "color": _RISK_COLOR.get(risk, "#cccccc"),
-                    "blocks": self.build_blocks(state, pr_url),
+                    "blocks": self.build_blocks(
+                        state, pr_url, affected_products, affected_dashboards),
                 }],
             )
             ok = resp.status_code == 200

@@ -6,76 +6,71 @@
 <title>Autonomous Impact Analyst</title>
 <style>
   :root{
-    --bg:#0b0f17;--panel:#131a26;--card:#0f1622;--line:#243044;--text:#e7eef7;--muted:#8aa0bd;
-    --green:#2ecc71;--red:#e74c3c;--orange:#e8912d;--blue:#3aa0ff;--violet:#7a5cc0;
+    --bg:#f4f6fb;--panel:#ffffff;--card:#ffffff;--line:#e3e8f0;--text:#1d2735;--muted:#67748b;
+    --green:#16a34a;--red:#dc2626;--amber:#d97706;--blue:#2563eb;
+    --green-bg:#eafaf0;--amber-bg:#fdf3e3;--red-bg:#fdeaea;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
-  header{padding:14px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px}
-  header h1{font-size:18px;margin:0;font-weight:680}
-  header .sub{color:var(--muted);font-size:13px}
-  .legend{margin-left:auto;display:flex;gap:16px;font-size:12px;color:var(--muted);align-items:center}
-  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
+  header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;background:var(--panel)}
+  header h1{font-size:18px;margin:0;font-weight:680;letter-spacing:-.01em}
+  .legend{margin-left:auto;display:flex;gap:18px;font-size:12px;color:var(--muted);align-items:center}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
   .main{flex:1;display:flex;min-height:0}
-  .board{flex:1;display:flex;gap:0;padding:20px;overflow:auto}
+  .board{flex:1;display:flex;padding:24px;overflow:auto}
   .lane{flex:1;min-width:230px;display:flex;flex-direction:column}
-  .lane h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 14px;text-align:center}
+  .lane h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 16px;text-align:center;font-weight:700}
   .lane-cards{display:flex;flex-direction:column;gap:12px}
-  .gutter{width:46px;display:flex;align-items:center;justify-content:center;color:#34465f;font-size:24px}
+  .gutter{width:48px;display:flex;align-items:center;justify-content:center;color:#c2cdde;font-size:22px}
   .gutter.flow{animation:pulse 1s ease-in-out infinite}
-  @keyframes pulse{0%,100%{color:#34465f}50%{color:var(--orange)}}
-  .card{background:var(--card);border:1px solid var(--line);border-left:4px solid #3a4d6b;border-radius:10px;padding:12px 13px;transition:all .35s}
-  .card .title{font-weight:650;font-size:14px;display:flex;align-items:center;gap:7px}
+  @keyframes pulse{0%,100%{color:#c2cdde}50%{color:var(--amber)}}
+  .card,.chip{background:var(--card);border:1px solid var(--line);border-left:4px solid #cbd5e1;border-radius:11px;padding:13px 14px;transition:all .35s;box-shadow:0 1px 2px rgba(20,40,80,.04)}
+  .card .title,.chip .title{font-weight:640;font-size:14px;display:flex;align-items:center;gap:7px}
   .card .tbl{font-size:11px;color:var(--muted);margin-top:2px;font-family:ui-monospace,Menlo,monospace}
   .schema{margin:9px 0 4px;border-top:1px dashed var(--line);padding-top:7px}
-  .col{display:flex;justify-content:space-between;font-size:11.5px;font-family:ui-monospace,Menlo,monospace;padding:1px 0}
-  .col .ty{color:#6f86a8}
-  select{width:100%;padding:8px;background:#0b1320;color:var(--text);border:1px solid var(--line);border-radius:7px;margin-top:10px;font:inherit;font-size:12.5px}
-  .breakBtn{width:100%;margin-top:7px;border:0;border-radius:7px;padding:8px;background:#3a1620;color:#ff9a9a;font-weight:650;cursor:pointer;font-size:12.5px}
-  .breakBtn:hover{background:var(--red);color:#fff}
-  .chip{background:var(--card);border:1px solid var(--line);border-left:4px solid #3a4d6b;border-radius:10px;padding:13px 14px;transition:all .35s}
-  .chip .title{font-weight:620;font-size:14px}
+  .col{display:flex;justify-content:space-between;font-size:11.5px;font-family:ui-monospace,Menlo,monospace;padding:1px 0;color:#3c4a5e}
+  .col .ty{color:#94a3b8}
   .chip .meta{font-size:11px;color:var(--muted);margin-top:3px}
-  /* status */
+  select{width:100%;padding:8px;background:#fbfcfe;color:var(--text);border:1px solid var(--line);border-radius:7px;margin-top:10px;font:inherit;font-size:12.5px}
+  .breakBtn{width:100%;margin-top:7px;border:1px solid #f0c8c8;border-radius:7px;padding:8px;background:#fff;color:var(--red);font-weight:640;cursor:pointer;font-size:12.5px;transition:all .2s}
+  .breakBtn:hover{background:var(--red);color:#fff;border-color:var(--red)}
   [data-status="healthy"]{border-left-color:var(--green)}
-  [data-status="broken"]{border-left-color:var(--orange);background:#1c1709;box-shadow:0 0 0 1px #4a3a14 inset}
-  [data-status="root"]{border-left-color:var(--red);background:#1c0d0d;box-shadow:0 0 0 1px #4a1414 inset}
-  .statusdot{float:right;width:9px;height:9px;border-radius:50%;background:var(--green);margin-top:4px}
-  [data-status="broken"] .statusdot{background:var(--orange)}
+  [data-status="broken"]{border-left-color:var(--amber);background:var(--amber-bg)}
+  [data-status="root"]{border-left-color:var(--red);background:var(--red-bg)}
+  .statusdot{margin-left:auto;width:9px;height:9px;border-radius:50%;background:var(--green)}
+  [data-status="broken"] .statusdot{background:var(--amber)}
   [data-status="root"] .statusdot{background:var(--red)}
-  /* side panel */
-  .side{width:360px;border-left:1px solid var(--line);background:var(--panel);padding:18px;overflow-y:auto;display:flex;flex-direction:column}
-  .pcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
-  .pcard h3{margin:0 0 9px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
-  .risk-low{background:#1d3b2a;color:var(--green)}.risk-medium{background:#4a3a14;color:#ffd479}
-  .risk-high{background:#4a2a14;color:#ffb37a}.risk-critical{background:#4a1414;color:#ff8a8a}
+  .side{width:380px;border-left:1px solid var(--line);background:var(--panel);padding:20px;overflow-y:auto;display:flex;flex-direction:column}
+  .pcard{background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:15px;margin-bottom:14px}
+  .pcard h3{margin:0 0 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+  .pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:700}
+  .risk-low{background:var(--green-bg);color:var(--green)}.risk-medium{background:var(--amber-bg);color:var(--amber)}
+  .risk-high{background:#fde9d6;color:#c2410c}.risk-critical{background:var(--red-bg);color:var(--red)}
   .muted{color:var(--muted);font-size:13px;line-height:1.55}
   a{color:var(--blue);word-break:break-all}
   .actbtn{width:100%;border:0;border-radius:8px;padding:11px;font-weight:680;cursor:pointer;margin-top:9px;font-size:14px}
-  .approve{background:var(--green);color:#06281a}.resetb{background:#222c3c;color:var(--text)}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  .step{font-size:12.5px;padding:7px 10px;border-left:3px solid var(--blue);background:#0d1420;margin:6px 0;border-radius:0 6px 6px 0}
-  .step.done{border-color:var(--green)}.step.err{border-color:var(--red);color:#ff9a9a}
+  .approve{background:var(--green);color:#fff}.resetb{background:#eef1f6;color:var(--text);border:1px solid var(--line)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .step{font-size:12.5px;padding:7px 11px;border-left:3px solid var(--blue);background:#f1f5fb;margin:6px 0;border-radius:0 6px 6px 0;color:#33415a}
+  .step.done{border-color:var(--green)}.step.err{border-color:var(--red);color:var(--red)}
 </style>
 </head>
 <body>
 <header>
-  <h1>🛰️ Autonomous Impact Analyst</h1>
-  <span class="sub">Pick a data source, choose how it breaks, and watch the impact ripple to the dashboards — with an automatic Slack alert &amp; fix PR.</span>
+  <h1>Autonomous Impact Analyst</h1>
   <span class="legend">
     <span><span class="dot" style="background:var(--green)"></span>healthy</span>
-    <span><span class="dot" style="background:var(--orange)"></span>affected</span>
+    <span><span class="dot" style="background:var(--amber)"></span>affected</span>
     <span><span class="dot" style="background:var(--red)"></span>broken at source</span>
   </span>
 </header>
 <div class="main">
   <div class="board">
-    <div class="lane"><h2>① Sources</h2><div class="lane-cards" id="lane-sources"></div></div>
-    <div class="gutter" id="g1">→</div>
-    <div class="lane"><h2>② Data products</h2><div class="lane-cards" id="lane-products"></div></div>
-    <div class="gutter" id="g2">→</div>
-    <div class="lane"><h2>③ Dashboards</h2><div class="lane-cards" id="lane-dashboards"></div></div>
+    <div class="lane"><h2>1 &middot; Sources</h2><div class="lane-cards" id="lane-sources"></div></div>
+    <div class="gutter" id="g1">&rarr;</div>
+    <div class="lane"><h2>2 &middot; Data products</h2><div class="lane-cards" id="lane-products"></div></div>
+    <div class="gutter" id="g2">&rarr;</div>
+    <div class="lane"><h2>3 &middot; Dashboards</h2><div class="lane-cards" id="lane-dashboards"></div></div>
   </div>
   <div class="side">
     <div class="pcard" id="resultCard" style="display:none">
@@ -84,8 +79,8 @@
       <div class="muted" id="summary" style="margin-top:8px"></div>
       <div class="muted" id="meta" style="margin-top:8px"></div>
       <div id="prLine" style="margin-top:8px"></div>
-      <button class="actbtn approve" id="approveBtn">✅ Approve &amp; heal</button>
-      <button class="actbtn resetb" id="resetBtn">↩︎ Reset</button>
+      <button class="actbtn approve" id="approveBtn">Approve &amp; heal</button>
+      <button class="actbtn resetb" id="resetBtn">Reset</button>
     </div>
     <div class="pcard" style="flex:1">
       <h3>Activity</h3>
@@ -102,18 +97,16 @@ async function loadLanes(){
   lanes = await (await fetch('/api/lanes')).json();
   renderSources(); renderProducts(); renderDashboards();
 }
-
 function renderSources(){
   const el=$('lane-sources'); el.innerHTML='';
   lanes.sources.forEach((s,si)=>{
-    const opts = s.options.map((o,i)=>`<option value="${i}">${o.label}</option>`).join('');
-    const cols = s.columns.map(c=>`<div class="col"><span>${c.name}</span><span class="ty">${c.type}</span></div>`).join('');
+    const opts=s.options.map((o,i)=>`<option value="${i}">${o.label}</option>`).join('');
+    const cols=s.columns.map(c=>`<div class="col"><span>${c.name}</span><span class="ty">${c.type}</span></div>`).join('');
     const d=document.createElement('div'); d.className='card'; d.dataset.status=s.status;
     d.innerHTML=`<div class="title">${s.name}<span class="statusdot"></span></div>
-      <div class="tbl">${s.table}</div>
-      <div class="schema">${cols}</div>
+      <div class="tbl">${s.table}</div><div class="schema">${cols}</div>
       <select id="sel-${si}">${opts}</select>
-      <button class="breakBtn" data-si="${si}">💥 Break it</button>`;
+      <button class="breakBtn" data-si="${si}">Break it</button>`;
     el.appendChild(d);
   });
   el.querySelectorAll('.breakBtn').forEach(b=>b.onclick=()=>doBreak(+b.dataset.si));
@@ -134,12 +127,10 @@ function renderDashboards(){
     el.appendChild(d);
   });
 }
-
 function addStep(msg,cls=''){const d=document.createElement('div');d.className='step '+cls;d.textContent=msg;$('steps').appendChild(d);$('steps').scrollTop=1e9;}
 function clearSteps(){$('steps').innerHTML='';}
 function flow(on){$('g1').classList.toggle('flow',on);$('g2').classList.toggle('flow',on);}
 function setBusy(b){busy=b;document.querySelectorAll('.breakBtn,#approveBtn,#resetBtn').forEach(x=>x.disabled=b);flow(b);}
-
 function stream(url,onDone){
   return new Promise((resolve)=>{
     const es=new EventSource(url);
@@ -150,7 +141,6 @@ function stream(url,onDone){
     es.onerror=()=>{es.close();resolve();};
   });
 }
-
 async function doBreak(si){
   if(busy)return; setBusy(true); clearSteps();
   const s=lanes.sources[si]; const opt=s.options[+$('sel-'+si).value];
@@ -160,15 +150,13 @@ async function doBreak(si){
     $('resultCard').style.display='block';
     $('riskLine').innerHTML=`Overall risk: <span class="pill risk-${d.risk}">${(d.risk||'').toUpperCase()}</span>`;
     $('summary').textContent=d.summary||'';
-    $('meta').innerHTML=`Affected: <b>${(d.affected||[]).length}</b> nodes · dashboards hit: <b>${(d.exposures||[]).join(', ')||'none'}</b> · Slack: <b>${d.slack_sent?'sent ✓':'—'}</b>`;
+    $('meta').innerHTML=`Affected products: <b>${(d.products||[]).join(', ')||'none'}</b><br>Dashboards hit: <b>${(d.exposures||[]).join(', ')||'none'}</b><br>Slack: <b>${d.slack_sent?'sent':'—'}</b>`;
     $('prLine').innerHTML=d.pr_url?`Fix PR: <a href="${d.pr_url}" target="_blank">${d.pr_url}</a>`:'<span class="muted">No PR for this change type</span>';
   });
   await loadLanes(); setBusy(false);
 }
-
 $('approveBtn').onclick=async()=>{if(busy)return;setBusy(true);clearSteps();await stream('/api/approve');$('resultCard').style.display='none';await loadLanes();setBusy(false);};
 $('resetBtn').onclick=async()=>{if(busy)return;setBusy(true);clearSteps();await stream('/api/reset');$('resultCard').style.display='none';await loadLanes();setBusy(false);};
-
 loadLanes();
 </script>
 </body>
