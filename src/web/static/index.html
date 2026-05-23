@@ -4,167 +4,172 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Autonomous Impact Analyst</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape-dagre/2.5.0/cytoscape-dagre.min.js"></script>
 <style>
-  :root{--bg:#0b0f17;--panel:#131a26;--line:#243044;--text:#e7eef7;--muted:#8aa0bd;
-        --green:#2ecc71;--red:#e74c3c;--orange:#e8912d;--blue:#3aa0ff;}
+  :root{
+    --bg:#0b0f17;--panel:#131a26;--card:#0f1622;--line:#243044;--text:#e7eef7;--muted:#8aa0bd;
+    --green:#2ecc71;--red:#e74c3c;--orange:#e8912d;--blue:#3aa0ff;--violet:#7a5cc0;
+  }
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
-  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px}
-  header h1{font-size:18px;margin:0;font-weight:650}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{padding:14px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px}
+  header h1{font-size:18px;margin:0;font-weight:680}
   header .sub{color:var(--muted);font-size:13px}
+  .legend{margin-left:auto;display:flex;gap:16px;font-size:12px;color:var(--muted);align-items:center}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
   .main{flex:1;display:flex;min-height:0}
-  #cy{flex:1;background:radial-gradient(circle at 30% 20%,#101725,#0b0f17)}
-  .side{width:380px;border-left:1px solid var(--line);background:var(--panel);padding:18px;overflow-y:auto}
-  .card{background:#0f1622;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
-  .card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-  button{font:inherit;border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:600;width:100%;margin-top:8px}
-  .btn-break{background:var(--red);color:#fff}
-  .btn-approve{background:var(--green);color:#06281a}
-  .btn-reset{background:#222c3c;color:var(--text)}
+  .board{flex:1;display:flex;gap:0;padding:20px;overflow:auto}
+  .lane{flex:1;min-width:230px;display:flex;flex-direction:column}
+  .lane h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 14px;text-align:center}
+  .lane-cards{display:flex;flex-direction:column;gap:12px}
+  .gutter{width:46px;display:flex;align-items:center;justify-content:center;color:#34465f;font-size:24px}
+  .gutter.flow{animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{0%,100%{color:#34465f}50%{color:var(--orange)}}
+  .card{background:var(--card);border:1px solid var(--line);border-left:4px solid #3a4d6b;border-radius:10px;padding:12px 13px;transition:all .35s}
+  .card .title{font-weight:650;font-size:14px;display:flex;align-items:center;gap:7px}
+  .card .tbl{font-size:11px;color:var(--muted);margin-top:2px;font-family:ui-monospace,Menlo,monospace}
+  .schema{margin:9px 0 4px;border-top:1px dashed var(--line);padding-top:7px}
+  .col{display:flex;justify-content:space-between;font-size:11.5px;font-family:ui-monospace,Menlo,monospace;padding:1px 0}
+  .col .ty{color:#6f86a8}
+  select{width:100%;padding:8px;background:#0b1320;color:var(--text);border:1px solid var(--line);border-radius:7px;margin-top:10px;font:inherit;font-size:12.5px}
+  .breakBtn{width:100%;margin-top:7px;border:0;border-radius:7px;padding:8px;background:#3a1620;color:#ff9a9a;font-weight:650;cursor:pointer;font-size:12.5px}
+  .breakBtn:hover{background:var(--red);color:#fff}
+  .chip{background:var(--card);border:1px solid var(--line);border-left:4px solid #3a4d6b;border-radius:10px;padding:13px 14px;transition:all .35s}
+  .chip .title{font-weight:620;font-size:14px}
+  .chip .meta{font-size:11px;color:var(--muted);margin-top:3px}
+  /* status */
+  [data-status="healthy"]{border-left-color:var(--green)}
+  [data-status="broken"]{border-left-color:var(--orange);background:#1c1709;box-shadow:0 0 0 1px #4a3a14 inset}
+  [data-status="root"]{border-left-color:var(--red);background:#1c0d0d;box-shadow:0 0 0 1px #4a1414 inset}
+  .statusdot{float:right;width:9px;height:9px;border-radius:50%;background:var(--green);margin-top:4px}
+  [data-status="broken"] .statusdot{background:var(--orange)}
+  [data-status="root"] .statusdot{background:var(--red)}
+  /* side panel */
+  .side{width:360px;border-left:1px solid var(--line);background:var(--panel);padding:18px;overflow-y:auto;display:flex;flex-direction:column}
+  .pcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+  .pcard h3{margin:0 0 9px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
+  .risk-low{background:#1d3b2a;color:var(--green)}.risk-medium{background:#4a3a14;color:#ffd479}
+  .risk-high{background:#4a2a14;color:#ffb37a}.risk-critical{background:#4a1414;color:#ff8a8a}
+  .muted{color:var(--muted);font-size:13px;line-height:1.55}
+  a{color:var(--blue);word-break:break-all}
+  .actbtn{width:100%;border:0;border-radius:8px;padding:11px;font-weight:680;cursor:pointer;margin-top:9px;font-size:14px}
+  .approve{background:var(--green);color:#06281a}.resetb{background:#222c3c;color:var(--text)}
   button:disabled{opacity:.45;cursor:not-allowed}
-  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
-  .risk-low{background:#1d3b2a;color:var(--green)} .risk-medium{background:#4a3a14;color:#ffd479}
-  .risk-high{background:#4a2a14;color:#ffb37a} .risk-critical{background:#4a1414;color:#ff8a8a}
-  .step{font-size:13px;padding:7px 10px;border-left:3px solid var(--blue);background:#0d1420;margin:6px 0;border-radius:0 6px 6px 0}
-  .step.done{border-color:var(--green)} .step.err{border-color:var(--red);color:#ff9a9a}
-  .muted{color:var(--muted);font-size:13px;line-height:1.5}
-  a{color:var(--blue)}
-  select{width:100%;padding:9px;background:#0d1420;color:var(--text);border:1px solid var(--line);border-radius:8px;margin-top:6px}
-  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);align-items:center}
-  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle}
+  .step{font-size:12.5px;padding:7px 10px;border-left:3px solid var(--blue);background:#0d1420;margin:6px 0;border-radius:0 6px 6px 0}
+  .step.done{border-color:var(--green)}.step.err{border-color:var(--red);color:#ff9a9a}
 </style>
 </head>
 <body>
 <header>
   <h1>🛰️ Autonomous Impact Analyst</h1>
-  <span class="sub">break a column → watch the agent trace impact, alert Slack &amp; open a PR → approve to heal the graph</span>
-  <span style="flex:1"></span>
+  <span class="sub">Pick a data source, choose how it breaks, and watch the impact ripple to the dashboards — with an automatic Slack alert &amp; fix PR.</span>
   <span class="legend">
     <span><span class="dot" style="background:var(--green)"></span>healthy</span>
     <span><span class="dot" style="background:var(--orange)"></span>affected</span>
-    <span><span class="dot" style="background:var(--red)"></span>root</span>
+    <span><span class="dot" style="background:var(--red)"></span>broken at source</span>
   </span>
 </header>
 <div class="main">
-  <div id="cy"></div>
+  <div class="board">
+    <div class="lane"><h2>① Sources</h2><div class="lane-cards" id="lane-sources"></div></div>
+    <div class="gutter" id="g1">→</div>
+    <div class="lane"><h2>② Data products</h2><div class="lane-cards" id="lane-products"></div></div>
+    <div class="gutter" id="g2">→</div>
+    <div class="lane"><h2>③ Dashboards</h2><div class="lane-cards" id="lane-dashboards"></div></div>
+  </div>
   <div class="side">
-    <div class="card">
-      <h3>Break a source column</h3>
-      <div class="muted">Drops the column from the warehouse, runs the agent, posts Slack &amp; opens a PR.</div>
-      <select id="colSelect">
-        <option value="current_price">coingecko_coins_markets · current_price</option>
-        <option value="total_volume">coingecko_coins_markets · total_volume</option>
-        <option value="market_cap">coingecko_coins_markets · market_cap</option>
-      </select>
-      <button class="btn-break" id="breakBtn">💥 Break it</button>
-    </div>
-
-    <div class="card" id="resultCard" style="display:none">
+    <div class="pcard" id="resultCard" style="display:none">
       <h3>Impact analysis</h3>
       <div id="riskLine"></div>
       <div class="muted" id="summary" style="margin-top:8px"></div>
       <div class="muted" id="meta" style="margin-top:8px"></div>
       <div id="prLine" style="margin-top:8px"></div>
-      <button class="btn-approve" id="approveBtn">✅ Approve PR &amp; heal</button>
-      <button class="btn-reset" id="resetBtn">↩︎ Reset (close PR + rebuild)</button>
+      <button class="actbtn approve" id="approveBtn">✅ Approve &amp; heal</button>
+      <button class="actbtn resetb" id="resetBtn">↩︎ Reset</button>
     </div>
-
-    <div class="card">
+    <div class="pcard" style="flex:1">
       <h3>Activity</h3>
-      <div id="steps"><div class="muted">Idle. Pick a column and break it.</div></div>
+      <div id="steps"><div class="muted">All systems healthy. Break a source to begin.</div></div>
     </div>
   </div>
 </div>
 
 <script>
-const $ = (id) => document.getElementById(id);
-let cy, busy = false;
+const $ = (id)=>document.getElementById(id);
+let busy=false, lanes=null;
 
-const STYLE = [
-  {selector:'node',style:{
-    'label':'data(name)','color':'#dce7f5','font-size':11,'text-valign':'bottom','text-margin-y':6,
-    'width':38,'height':38,'background-color':'#33415a','border-width':2,'border-color':'#4a607f'}},
-  {selector:'node[layer="staging"]',style:{'background-color':'#2c4a6e'}},
-  {selector:'node[layer="intermediate"]',style:{'background-color':'#3a5a82'}},
-  {selector:'node[layer="marts"]',style:{'background-color':'#4671a0'}},
-  {selector:'node[label="Source"]',style:{'shape':'round-rectangle','background-color':'#2b6f5a'}},
-  {selector:'node[label="Exposure"]',style:{'shape':'diamond','width':46,'height':46,'background-color':'#7a5cc0'}},
-  {selector:'node[status="broken"]',style:{'background-color':'#e8912d','border-color':'#ffd089'}},
-  {selector:'node[status="root"]',style:{'background-color':'#e74c3c','border-color':'#ff9a9a','border-width':4}},
-  {selector:'edge',style:{'width':2,'line-color':'#2b3a52','target-arrow-color':'#2b3a52',
-    'target-arrow-shape':'triangle','curve-style':'bezier','arrow-scale':.9}},
-  {selector:'edge[broken="1"]',style:{'line-color':'#e8912d','target-arrow-color':'#e8912d','width':3}},
-];
-
-async function loadGraph(){
-  const g = await (await fetch('/api/graph')).json();
-  const broken = new Set(g.incident.broken || []);
-  const els = [
-    ...g.nodes.map(n=>({data:{id:n.id,name:n.name,label:n.label,layer:n.layer,status:n.status}})),
-    ...g.edges.map(e=>({data:{id:e.source+'>'+e.target,source:e.source,target:e.target,
-      broken:(broken.has(e.source)&&broken.has(e.target))?'1':'0'}}))
-  ];
-  if(!cy){
-    cy = cytoscape({container:$('cy'),elements:els,style:STYLE,
-      layout:{name:'dagre',rankDir:'LR',nodeSep:22,rankSep:90}});
-  } else {
-    cy.json({elements:els}); cy.layout({name:'dagre',rankDir:'LR',nodeSep:22,rankSep:90}).run();
-  }
+async function loadLanes(){
+  lanes = await (await fetch('/api/lanes')).json();
+  renderSources(); renderProducts(); renderDashboards();
 }
 
-function addStep(msg, cls=''){
-  const d = document.createElement('div'); d.className='step '+cls; d.textContent=msg;
-  $('steps').appendChild(d); $('steps').scrollTop = 1e9;
+function renderSources(){
+  const el=$('lane-sources'); el.innerHTML='';
+  lanes.sources.forEach((s,si)=>{
+    const opts = s.options.map((o,i)=>`<option value="${i}">${o.label}</option>`).join('');
+    const cols = s.columns.map(c=>`<div class="col"><span>${c.name}</span><span class="ty">${c.type}</span></div>`).join('');
+    const d=document.createElement('div'); d.className='card'; d.dataset.status=s.status;
+    d.innerHTML=`<div class="title">${s.name}<span class="statusdot"></span></div>
+      <div class="tbl">${s.table}</div>
+      <div class="schema">${cols}</div>
+      <select id="sel-${si}">${opts}</select>
+      <button class="breakBtn" data-si="${si}">💥 Break it</button>`;
+    el.appendChild(d);
+  });
+  el.querySelectorAll('.breakBtn').forEach(b=>b.onclick=()=>doBreak(+b.dataset.si));
 }
-function clearSteps(){ $('steps').innerHTML=''; }
+function renderProducts(){
+  const el=$('lane-products'); el.innerHTML='';
+  lanes.products.forEach(p=>{
+    const d=document.createElement('div'); d.className='chip'; d.dataset.status=p.status;
+    d.innerHTML=`<div class="title">${p.name}<span class="statusdot"></span></div><div class="meta">data product</div>`;
+    el.appendChild(d);
+  });
+}
+function renderDashboards(){
+  const el=$('lane-dashboards'); el.innerHTML='';
+  lanes.dashboards.forEach(x=>{
+    const d=document.createElement('div'); d.className='chip'; d.dataset.status=x.status;
+    d.innerHTML=`<div class="title">${x.name}<span class="statusdot"></span></div><div class="meta">priority: ${x.priority}</div>`;
+    el.appendChild(d);
+  });
+}
 
-function stream(url, onDone){
+function addStep(msg,cls=''){const d=document.createElement('div');d.className='step '+cls;d.textContent=msg;$('steps').appendChild(d);$('steps').scrollTop=1e9;}
+function clearSteps(){$('steps').innerHTML='';}
+function flow(on){$('g1').classList.toggle('flow',on);$('g2').classList.toggle('flow',on);}
+function setBusy(b){busy=b;document.querySelectorAll('.breakBtn,#approveBtn,#resetBtn').forEach(x=>x.disabled=b);flow(b);}
+
+function stream(url,onDone){
   return new Promise((resolve)=>{
-    const es = new EventSource(url);
-    es.onmessage = (m)=>{
-      const d = JSON.parse(m.data);
-      if(d.type==='step') addStep(d.msg);
-      else if(d.type==='error'){ addStep('Error: '+d.msg,'err'); es.close(); resolve(); }
-      else if(d.type==='done'){ addStep('Done.','done'); es.close(); onDone&&onDone(d); resolve(); }
-    };
-    es.onerror = ()=>{ es.close(); resolve(); };
+    const es=new EventSource(url);
+    es.onmessage=(m)=>{const d=JSON.parse(m.data);
+      if(d.type==='step')addStep(d.msg);
+      else if(d.type==='error'){addStep('Error: '+d.msg,'err');es.close();resolve();}
+      else if(d.type==='done'){addStep('Done.','done');es.close();onDone&&onDone(d);resolve();}};
+    es.onerror=()=>{es.close();resolve();};
   });
 }
 
-$('breakBtn').onclick = async ()=>{
-  if(busy) return; busy=true; setBusy(true); clearSteps();
-  const col = $('colSelect').value;
-  const node = 'source.autonomous_impact_analyst.coingecko.coingecko_coins_markets';
-  await stream(`/api/break?node_id=${encodeURIComponent(node)}&column=${col}`, (d)=>{
+async function doBreak(si){
+  if(busy)return; setBusy(true); clearSteps();
+  const s=lanes.sources[si]; const opt=s.options[+$('sel-'+si).value];
+  const qs=new URLSearchParams({node_id:s.id,anomaly:opt.anomaly});
+  if(opt.column) qs.set('column',opt.column);
+  await stream('/api/break?'+qs.toString(),(d)=>{
     $('resultCard').style.display='block';
-    $('riskLine').innerHTML = `Overall risk: <span class="pill risk-${d.risk}">${(d.risk||'').toUpperCase()}</span>`;
-    $('summary').textContent = d.summary || '';
-    $('meta').innerHTML = `Affected nodes: <b>${(d.affected||[]).length}</b> · pruned paths: <b>${d.pruned}</b> · exposures: <b>${(d.exposures||[]).join(', ')||'none'}</b> · Slack: <b>${d.slack_sent?'sent ✓':'—'}</b>`;
-    $('prLine').innerHTML = d.pr_url ? `Proposed fix PR: <a href="${d.pr_url}" target="_blank">${d.pr_url}</a>` : '<span class="muted">No PR (non-schema change)</span>';
+    $('riskLine').innerHTML=`Overall risk: <span class="pill risk-${d.risk}">${(d.risk||'').toUpperCase()}</span>`;
+    $('summary').textContent=d.summary||'';
+    $('meta').innerHTML=`Affected: <b>${(d.affected||[]).length}</b> nodes · dashboards hit: <b>${(d.exposures||[]).join(', ')||'none'}</b> · Slack: <b>${d.slack_sent?'sent ✓':'—'}</b>`;
+    $('prLine').innerHTML=d.pr_url?`Fix PR: <a href="${d.pr_url}" target="_blank">${d.pr_url}</a>`:'<span class="muted">No PR for this change type</span>';
   });
-  await loadGraph(); setBusy(false); busy=false;
-};
+  await loadLanes(); setBusy(false);
+}
 
-$('approveBtn').onclick = async ()=>{
-  if(busy) return; busy=true; setBusy(true); clearSteps();
-  await stream('/api/approve');
-  $('resultCard').style.display='none';
-  await loadGraph(); setBusy(false); busy=false;
-};
+$('approveBtn').onclick=async()=>{if(busy)return;setBusy(true);clearSteps();await stream('/api/approve');$('resultCard').style.display='none';await loadLanes();setBusy(false);};
+$('resetBtn').onclick=async()=>{if(busy)return;setBusy(true);clearSteps();await stream('/api/reset');$('resultCard').style.display='none';await loadLanes();setBusy(false);};
 
-$('resetBtn').onclick = async ()=>{
-  if(busy) return; busy=true; setBusy(true); clearSteps();
-  await stream('/api/reset');
-  $('resultCard').style.display='none';
-  await loadGraph(); setBusy(false); busy=false;
-};
-
-function setBusy(b){ ['breakBtn','approveBtn','resetBtn'].forEach(id=>$(id).disabled=b); }
-
-loadGraph();
+loadLanes();
 </script>
 </body>
 </html>
