@@ -54,7 +54,7 @@ class GraphQueries:
 
     def downstream_models(self, model_id: str) -> list[dict]:
         cypher = (
-            "MATCH (s {unique_id: $id})<-[:DEPENDS_ON*]-(d) "
+            "MATCH (s {unique_id: $id})<-[:DEPENDS_ON*1..15]-(d) "
             "WHERE d:Model OR d:Source "
             "RETURN DISTINCT d.unique_id AS unique_id, d.name AS name, d.layer AS layer"
         )
@@ -63,7 +63,7 @@ class GraphQueries:
 
     def upstream_models(self, model_id: str) -> list[dict]:
         cypher = (
-            "MATCH (s {unique_id: $id})-[:DEPENDS_ON*]->(u) "
+            "MATCH (s {unique_id: $id})-[:DEPENDS_ON*1..15]->(u) "
             "RETURN DISTINCT u.unique_id AS unique_id, u.name AS name, u.layer AS layer"
         )
         with self.driver.session() as session:
@@ -74,7 +74,7 @@ class GraphQueries:
     def column_lineage_forward(self, model_id: str, column: str) -> list[dict]:
         col_id = f"{model_id}.{column}"
         cypher = (
-            "MATCH path = (c:Column {unique_id: $col})<-[rels:DERIVES_FROM*]-(d:Column) "
+            "MATCH path = (c:Column {unique_id: $col})<-[rels:DERIVES_FROM*1..15]-(d:Column) "
             "RETURN nodes(path) AS ns, [r IN rels | r.confidence] AS confs"
         )
         return self._paths_as_columns(cypher, col=col_id)
@@ -82,7 +82,7 @@ class GraphQueries:
     def column_lineage_backward(self, model_id: str, column: str) -> list[dict]:
         col_id = f"{model_id}.{column}"
         cypher = (
-            "MATCH path = (c:Column {unique_id: $col})-[rels:DERIVES_FROM*]->(u:Column) "
+            "MATCH path = (c:Column {unique_id: $col})-[rels:DERIVES_FROM*1..15]->(u:Column) "
             "RETURN nodes(path) AS ns, [r IN rels | r.confidence] AS confs"
         )
         return self._paths_as_columns(cypher, col=col_id)
@@ -138,7 +138,7 @@ class GraphQueries:
 
     def paths_to_exposures(self, model_id: str) -> list[list[dict]]:
         cypher = (
-            "MATCH path = (m {unique_id: $id})<-[:DEPENDS_ON|CONSUMES*]-(e:Exposure) "
+            "MATCH path = (m {unique_id: $id})<-[:DEPENDS_ON|CONSUMES*1..15]-(e:Exposure) "
             "RETURN nodes(path) AS ns"
         )
         out: list[list[dict]] = []
@@ -163,7 +163,7 @@ class GraphQueries:
     def distance_to_nearest_exposure(self, model_id: str) -> int | None:
         cypher = (
             "MATCH path = shortestPath("
-            "(m {unique_id: $id})<-[:DEPENDS_ON|CONSUMES*]-(e:Exposure)) "
+            "(m {unique_id: $id})<-[:DEPENDS_ON|CONSUMES*1..15]-(e:Exposure)) "
             "RETURN length(path) AS d ORDER BY d ASC LIMIT 1"
         )
         with self.driver.session() as session:
